@@ -1,0 +1,66 @@
+# Root Monorepo .gitignore for KlimoApp (FlutterApps + Backend)
+
+# General / OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE & Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*.iml
+
+# ----------------------------------------------------
+# 1. Flutter Applications (.gitignore)
+# ----------------------------------------------------
+FlutterApps/.dart_tool/
+FlutterApps/.flutter-plugins
+FlutterApps/.flutter-plugins-dependencies
+FlutterApps/.packages
+FlutterApps/.pub-cache/
+FlutterApps/.pub/
+FlutterApps/build/
+FlutterApps/ios/Flutter/.last_build_id
+FlutterApps/ios/Flutter/Flutter.framework
+FlutterApps/ios/Flutter/Flutter.podspec
+FlutterApps/ios/Flutter/Generated.xcconfig
+FlutterApps/ios/Flutter/app.framework
+FlutterApps/ios/Pods/
+FlutterApps/ios/.symlinks/
+FlutterApps/ios/Podfile.lock
+FlutterApps/android/.gradle/
+FlutterApps/android/captures/
+FlutterApps/android/local.properties
+FlutterApps/android/app/debug/
+FlutterApps/android/app/profile/
+FlutterApps/android/app/release/
+
+# ----------------------------------------------------
+# 2. Laravel Backend (.gitignore)
+# ----------------------------------------------------
+Backend/vendor/
+Backend/node_modules/
+Backend/npm-debug.log
+Backend/yarn-error.log
+Backend/.env
+Backend/.env.backup
+Backend/.env.*
+!Backend/.env.example
+Backend/storage/*.key
+Backend/storage/logs/*.log
+Backend/storage/framework/cache/data/*
+Backend/storage/framework/sessions/*
+Backend/storage/framework/views/*
+Backend/storage/framework/testing/*
+Backend/public/storage
+Backend/public/hot
+Backend/public/build
+Backend/.phpunit.result.cache
+Backend/.php-cs-fixer.cache
+Backend/bootstrap/cache/*.php

@@ -1,0 +1,10 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:klimo_wearth/main.dart';
+
+void main() {
+  testWidgets('App smoke test', (WidgetTester tester) async {
+    await tester.pumpWidget(const KlimoApp());
+    expect(find.text('Klimo Wearth'), findsOneWidget);
+    expect(find.text('Masuk'), findsOneWidget);
+  });
+}
