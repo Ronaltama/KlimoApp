@@ -3,7 +3,7 @@ import 'package:klimo_wearth/main.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(const KlimoApp());
+    await tester.pumpWidget(const MyApp());
     expect(find.text('Klimo Wearth'), findsOneWidget);
     expect(find.text('Masuk'), findsOneWidget);
   });

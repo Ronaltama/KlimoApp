@@ -64,3 +64,10 @@ Backend/public/build
 Backend/.phpunit.result.cache
 Backend/.php-cs-fixer.cache
 Backend/bootstrap/cache/*.php
+
+# ----------------------------------------------------
+# 3. PlatformIO (.gitignore)
+# ----------------------------------------------------
+.pio/
+IoT_Simulator/.pio/
+
