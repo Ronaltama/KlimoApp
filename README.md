@@ -2,9 +2,10 @@
 
 Repository monorepo untuk proyek **Klimo Wearth** (Personal Weather & Wearable Microclimate Monitoring).
 
-Repository ini terdiri dari dua direktori utama:
-1. `FlutterApps/` — Aplikasi mobile Flutter (Starter dengan Login & Home).
-2. `Backend/` — REST API Backend berbasis **Laravel 13** & Laravel Sanctum.
+Repository ini terdiri dari 3 direktori utama:
+1. `Backend/` — REST API Backend berbasis **Laravel 13** & Laravel Sanctum.
+2. `IoT_Simulator/` — Simulator Sensor Python & Firmware **ESP32-C3** (PlatformIO).
+3. `FlutterApps/` — Aplikasi mobile & desktop Flutter (UI Monitoring & Dashboard).
 
 ---
 
@@ -14,63 +15,78 @@ Repository ini terdiri dari dua direktori utama:
 KlimoApp/
 ├── Backend/          # Laravel 13 API Backend
 │   ├── app/
-│   ├── config/
-│   ├── database/     # Migrations & Seeders (Users, Sanctum tokens)
-│   ├── routes/
-│   │   └── api.php   # Endpoint autentikasi (/api/login, /api/register, dsb)
+│   ├── database/     # Migrations & Seeders
+│   ├── routes/api.php
 │   └── ...
+├── IoT_Simulator/    # Firmware ESP32-C3 & Software Simulator
+│   ├── platformio.ini# Konfigurasi PlatformIO
+│   ├── simulator.py  # Python sensor simulator (no hardware needed)
+│   └── src/main.cpp  # Firmware C++ ESP32-C3
 ├── FlutterApps/      # Flutter Mobile App
-│   ├── lib/
-│   │   └── main.dart # Starter app dengan form login & dashboard
+│   ├── lib/          # UI, State & API Services
 │   ├── pubspec.yaml
 │   └── ...
-├── .gitignore        # Root .gitignore untuk monorepo
+├── run_demo.sh       # Script otomatis interaktif untuk menjalankan ekosistem
+├── PANDUAN_MENJALANKAN.md # Panduan lengkap menjalankan seluruh komponen
 └── README.md
 ```
 
 ---
 
-## 🚀 Panduan Menjalankan
+## ⚡ Cara Menjalankan Cepat (All-in-One)
 
-### 1. Backend (Laravel 13)
+Gunakan skrip runner interaktif yang telah disediakan:
 
 ```bash
-cd Backend
-
-# Salin environment file jika belum ada
-cp .env.example .env
-
-# Jalankan migrasi dan seeder awal
-php artisan migrate --seed
-
-# Jalankan server lokal
-php artisan serve
-# Server akan berjalan di http://127.0.0.1:8000
+./run_demo.sh
 ```
+Pilih opsi **`[4]`** untuk menyalakan Backend + IoT Simulator secara otomatis di background dan membuka aplikasi Flutter.
 
+---
+
+## 🚀 Panduan Menjalankan Manual (3 Terminal Terpisah)
+
+Untuk melihat log setiap komponen secara jelas, buka 3 jendela terminal:
+
+### 1. Backend (Laravel 13)
+```bash
+cd Backend
+cp .env.example .env    # Jika belum ada
+php artisan migrate --seed
+php artisan serve --host=0.0.0.0 --port=8000
+```
 > **Akun Default untuk Uji Coba:**
 > - **Email:** `test@example.com`
 > - **Password:** `password`
 
-### 2. Flutter App (`FlutterApps`)
+### 2. IoT Simulator (Python / ESP32-C3)
+```bash
+cd IoT_Simulator
+# Opsi A: Software Simulator (Python)
+python3 simulator.py
 
+# Opsi B: Hardware ESP32-C3 (PlatformIO)
+pio run -t upload && pio device monitor -b 115200
+```
+
+### 3. Flutter App (`FlutterApps`)
 ```bash
 cd FlutterApps
-
-# Unduh dependensi
 flutter pub get
-
-# Jalankan aplikasi (pilih device / emulator / linux desktop)
 flutter run
 ```
 
+> 📖 Untuk panduan mendalam dan konfigurasi IP Emulator/Device fisik, baca [PANDUAN_MENJALANKAN.md](PANDUAN_MENJALANKAN.md).
+
 ---
 
-## 🔑 Endpoint API Awal
+## 🔑 Endpoint API Utama
 
 | Method | Endpoint | Keterangan |
 | :--- | :--- | :--- |
 | `POST` | `/api/register` | Mendaftarkan akun baru |
-| `POST` | `/api/login` | Login dan mendapatkan Sanctum Bearer Token |
-| `GET`  | `/api/profile` | Mengambil data user yang sedang login (Bearer Token) |
-| `POST` | `/api/logout` | Revoke token / logout (Bearer Token) |
+| `POST` | `/api/login` | Login dan memperoleh Bearer Token Sanctum |
+| `GET`  | `/api/profile` | Mengambil data user yang sedang login |
+| `POST` | `/api/telemetry` | Mengirim data pembacaan sensor IoT (UV, Suhu, dsb.) |
+| `GET`  | `/api/telemetry/history` | Riwayat data telemetri sensor |
+| `POST` | `/api/logout` | Revoke token / logout |

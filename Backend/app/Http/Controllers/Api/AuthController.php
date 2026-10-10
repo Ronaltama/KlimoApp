@@ -71,6 +71,23 @@ class AuthController extends Controller
         ]);
     }
 
+    public function updateProfile(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+        ]);
+
+        $user = $request->user();
+        $user->name = $validated['name'];
+        $user->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Profil berhasil diperbarui',
+            'data' => $user,
+        ]);
+    }
+
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();

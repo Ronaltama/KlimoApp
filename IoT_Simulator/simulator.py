@@ -112,7 +112,8 @@ def main():
         try:
             resp = requests.post(API_URL, json=payload, headers={'Content-Type': 'application/json'}, timeout=3)
             if resp.status_code in [200, 201]:
-                print(f"[{now}] #{count} {GREEN}✔ SENT HTTP 201{RESET} | "
+                db_action = f"{GREEN}✔ DB SAVED (201){RESET}" if resp.status_code == 201 else f"{CYAN}⚡ DB SKIPPED (200){RESET}"
+                print(f"[{now}] #{count} {db_action} | "
                       f"UV: {BOLD}{payload['uv_index']}{RESET} ({uv_status}) | "
                       f"Temp: {payload['temperature']}°C | "
                       f"Hum: {payload['humidity']}% | "

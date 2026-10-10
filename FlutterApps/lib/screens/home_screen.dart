@@ -38,6 +38,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  String _getSyncText() {
+    if (telemetryData == null) return 'MENUNGGU DATA';
+    final createdAtStr = telemetryData!['created_at'];
+    if (createdAtStr == null) return 'LIVE STREAM';
+    try {
+      final dt = DateTime.parse(createdAtStr.toString()).toLocal();
+      final diff = DateTime.now().difference(dt);
+      if (diff.inSeconds < 10) return 'BARU SAJA';
+      if (diff.inSeconds < 60) return '${diff.inSeconds} DETIK LALU';
+      if (diff.inMinutes < 60) return '${diff.inMinutes} MNT LALU';
+      return '${diff.inHours} JAM LALU';
+    } catch (_) {
+      return 'TERHUBUNG';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -131,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'SINKRON 2 MNT LALU',
+                      _getSyncText(),
                       style: TextStyle(
                         fontSize: 10,
                         color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,

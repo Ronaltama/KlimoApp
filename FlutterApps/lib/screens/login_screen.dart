@@ -56,7 +56,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     if (result['success']) {
-      Navigator.pushReplacementNamed(context, '/pairing');
+      final isSetupDone = await ApiService.isOnboardingCompleted();
+      if (!mounted) return;
+      if (isSetupDone) {
+        Navigator.pushReplacementNamed(context, '/main');
+      } else {
+        Navigator.pushReplacementNamed(context, '/pairing');
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -65,8 +71,14 @@ class _LoginScreenState extends State<LoginScreen> {
           action: SnackBarAction(
             label: 'Lewati',
             textColor: Colors.white,
-            onPressed: () {
-              Navigator.pushReplacementNamed(context, '/pairing');
+            onPressed: () async {
+              final isSetupDone = await ApiService.isOnboardingCompleted();
+              if (!mounted) return;
+              if (isSetupDone) {
+                Navigator.pushReplacementNamed(context, '/main');
+              } else {
+                Navigator.pushReplacementNamed(context, '/pairing');
+              }
             },
           ),
         ),

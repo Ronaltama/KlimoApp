@@ -1,26 +1,43 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../../services/api_service.dart';
 
 class DevicePairingScreen extends StatelessWidget {
-  const DevicePairingScreen({super.key});
+  final bool isEditMode;
+  const DevicePairingScreen({super.key, this.isEditMode = false});
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18),
+          icon: Icon(
+            Icons.arrow_back_ios,
+            size: 18,
+            color: isDark ? Colors.white : AppTheme.textDark,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Langkah 2 dari 3', style: TextStyle(fontSize: 16)),
+        title: Text(
+          isEditMode ? 'Sambungkan Alat' : 'Langkah 2 dari 3',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : AppTheme.textDark,
+          ),
+        ),
         titleSpacing: 0,
         actions: [
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFFECFDF5),
+              color: isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
@@ -46,14 +63,16 @@ class DevicePairingScreen extends StatelessWidget {
             ),
           )
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(4),
-          child: LinearProgressIndicator(
-            value: 0.66,
-            backgroundColor: AppTheme.greyLight,
-            valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
-          ),
-        ),
+        bottom: isEditMode
+            ? null
+            : const PreferredSize(
+                preferredSize: Size.fromHeight(4),
+                child: LinearProgressIndicator(
+                  value: 0.66,
+                  backgroundColor: AppTheme.greyLight,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                ),
+              ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -64,7 +83,7 @@ class DevicePairingScreen extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppTheme.card,
+                color: isDark ? AppTheme.darkCard : AppTheme.card,
                 borderRadius: BorderRadius.circular(24),
               ),
               child: Column(
@@ -79,52 +98,52 @@ class DevicePairingScreen extends StatelessWidget {
                     child: const Icon(Icons.watch, color: AppTheme.primary, size: 32),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'Klimo Wearth',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.textDark,
+                      color: isDark ? Colors.white : AppTheme.textDark,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Alat pintar UV & Polusi',
+                  Text(
+                    'Alat pintar UV & Polusi ESP32-C3',
                     style: TextStyle(
                       fontSize: 14,
-                      color: AppTheme.textLight,
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
                     ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 32),
-            const Text(
+            Text(
               'Nyalakan alatmu',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: AppTheme.textDark,
+                color: isDark ? Colors.white : AppTheme.textDark,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Tahan tombol 3 detik sampai lampu berkedip biru.',
               style: TextStyle(
                 fontSize: 15,
-                color: AppTheme.textLight,
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
               ),
             ),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'Alat terdekat',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.textDark,
+                    color: isDark ? Colors.white : AppTheme.textDark,
                   ),
                 ),
                 Container(
@@ -145,17 +164,35 @@ class DevicePairingScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            _buildDeviceCard(context, 'Klimo-A3F2', 'Sinyal kuat', AppTheme.primary),
+            _buildDeviceCard(context, 'Klimo-A3F2 (ESP32-C3)', 'Sinyal kuat', AppTheme.primary, isDark),
             const SizedBox(height: 12),
-            _buildDeviceCard(context, 'Klimo-7B10', 'Sinyal sedang', AppTheme.warning),
+            _buildDeviceCard(context, 'Klimo-7B10 (Wearable)', 'Sinyal sedang', AppTheme.warning, isDark),
             const SizedBox(height: 24),
             Row(
               children: [
-                const Text('Izin  Bluetooth ', style: TextStyle(color: AppTheme.textLight, fontSize: 13)),
+                Text(
+                  'Izin  Bluetooth ',
+                  style: TextStyle(
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                    fontSize: 13,
+                  ),
+                ),
                 const Icon(Icons.check, color: AppTheme.primary, size: 16),
-                const Text('  ·  Lokasi ', style: TextStyle(color: AppTheme.textLight, fontSize: 13)),
+                Text(
+                  '  ·  Lokasi ',
+                  style: TextStyle(
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                    fontSize: 13,
+                  ),
+                ),
                 const Icon(Icons.check, color: AppTheme.primary, size: 16),
-                const Text('  ·  Notifikasi ', style: TextStyle(color: AppTheme.textLight, fontSize: 13)),
+                Text(
+                  '  ·  Notifikasi ',
+                  style: TextStyle(
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                    fontSize: 13,
+                  ),
+                ),
                 Icon(Icons.radio_button_unchecked, color: Colors.grey.shade400, size: 16),
               ],
             ),
@@ -171,9 +208,18 @@ class DevicePairingScreen extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('Tidak ketemu? ', style: TextStyle(color: AppTheme.textLight)),
+                  Text(
+                    'Tidak ketemu? ',
+                    style: TextStyle(
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                    ),
+                  ),
                   GestureDetector(
-                    onTap: () {},
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Memindai ulang perangkat Bluetooth di sekitar...')),
+                      );
+                    },
                     child: const Text(
                       'Coba lagi',
                       style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold),
@@ -186,19 +232,25 @@ class DevicePairingScreen extends StatelessWidget {
                 width: double.infinity,
                 child: OutlinedButton(
                   onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/skin_type');
+                    if (isEditMode && Navigator.canPop(context)) {
+                      Navigator.pop(context);
+                    } else {
+                      Navigator.pushReplacementNamed(context, '/skin_type');
+                    }
                   },
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: BorderSide(color: Colors.grey.shade300),
+                    side: BorderSide(
+                      color: isDark ? AppTheme.darkCardBorder : Colors.grey.shade300,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    'Lewati dulu (tanpa alat)',
+                  child: Text(
+                    isEditMode ? 'Batal' : 'Lewati dulu (tanpa alat)',
                     style: TextStyle(
-                      color: AppTheme.textLight,
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
@@ -212,12 +264,15 @@ class DevicePairingScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDeviceCard(BuildContext context, String name, String signalText, Color signalColor) {
+  Widget _buildDeviceCard(BuildContext context, String name, String signalText, Color signalColor, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.card,
+        color: isDark ? AppTheme.darkCard : AppTheme.card,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -227,10 +282,10 @@ class DevicePairingScreen extends StatelessWidget {
             children: [
               Text(
                 name,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark,
+                  color: isDark ? Colors.white : AppTheme.textDark,
                 ),
               ),
               const SizedBox(height: 4),
@@ -244,15 +299,23 @@ class DevicePairingScreen extends StatelessWidget {
             ],
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              await ApiService.saveConnectedDevice(name);
+              if (!context.mounted) return;
+
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Terhubung ke $name via Bluetooth Low Energy!'),
+                  content: Text('Terhubung ke $name via BLE!'),
                   backgroundColor: AppTheme.primary,
                   duration: const Duration(milliseconds: 1500),
                 ),
               );
-              Navigator.pushReplacementNamed(context, '/skin_type');
+
+              if (isEditMode && Navigator.canPop(context)) {
+                Navigator.pop(context, name);
+              } else {
+                Navigator.pushReplacementNamed(context, '/skin_type');
+              }
             },
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),

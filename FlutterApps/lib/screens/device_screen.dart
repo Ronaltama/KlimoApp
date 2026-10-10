@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import 'setup/device_pairing_screen.dart';
 
 class DeviceScreen extends StatefulWidget {
   const DeviceScreen({super.key});
@@ -12,21 +13,48 @@ class DeviceScreen extends StatefulWidget {
 class _DeviceScreenState extends State<DeviceScreen> {
   bool _powerSaving = true;
   List<dynamic> _devices = [];
+  Map<String, dynamic>? _latestTelemetry;
+  String _savedDeviceName = 'Klimo Wearth C3-4A1B';
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchDevices();
+    _fetchDeviceData();
   }
 
-  Future<void> _fetchDevices() async {
-    final data = await ApiService.getDevices();
-    if (mounted) {
-      setState(() {
-        _devices = data;
-        _isLoading = false;
-      });
+  Future<void> _fetchDeviceData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final devicesData = await ApiService.getDevices();
+    final savedName = await ApiService.getConnectedDevice();
+    final latestTel = await ApiService.getLatestTelemetry();
+
+    if (!mounted) return;
+
+    setState(() {
+      _devices = devicesData;
+      _savedDeviceName = savedName;
+      _latestTelemetry = latestTel;
+      _isLoading = false;
+    });
+  }
+
+  String _getSyncTimeText() {
+    if (_latestTelemetry == null || _latestTelemetry!['created_at'] == null) {
+      return 'Terakhir sinkron: Baru saja';
+    }
+    try {
+      final dt = DateTime.parse(_latestTelemetry!['created_at'].toString()).toLocal();
+      final diff = DateTime.now().difference(dt);
+      if (diff.inSeconds < 10) return 'Terakhir sinkron: Baru saja';
+      if (diff.inSeconds < 60) return 'Terakhir sinkron: ${diff.inSeconds} detik lalu';
+      if (diff.inMinutes < 60) return 'Terakhir sinkron: ${diff.inMinutes} menit lalu';
+      return 'Terakhir sinkron: ${diff.inHours} jam lalu';
+    } catch (_) {
+      return 'Terakhir sinkron: Aktif via BLE';
     }
   }
 
@@ -37,60 +65,67 @@ class _DeviceScreenState extends State<DeviceScreen> {
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(isDark),
-              const SizedBox(height: 20),
-              _buildDeviceCard(isDark),
-              const SizedBox(height: 16),
-              _buildSensorStatusCard(isDark),
-              const SizedBox(height: 16),
-              _buildPowerSavingCard(isDark),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildActionButton(
-                      Icons.thermostat_outlined,
-                      'Kalibrasi suhu',
-                      isDark,
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Kalibrasi offset sensor SHT40 berhasil disimpan (-0.2°C).'),
-                            backgroundColor: AppTheme.primary,
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
+        child: RefreshIndicator(
+          onRefresh: _fetchDeviceData,
+          color: AppTheme.primary,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(isDark),
+                const SizedBox(height: 20),
+                _buildDeviceCard(isDark),
+                const SizedBox(height: 16),
+                _buildHardwareSpecsCard(isDark),
+                const SizedBox(height: 16),
+                _buildSensorStatusCard(isDark),
+                const SizedBox(height: 16),
+                _buildPowerSavingCard(isDark),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildActionButton(
+                        Icons.thermostat_outlined,
+                        'Kalibrasi suhu',
+                        isDark,
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Kalibrasi offset sensor SHT40 berhasil disimpan (-0.2°C).'),
+                              backgroundColor: AppTheme.primary,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: _buildActionButton(
-                      Icons.vibration,
-                      'Tes getar',
-                      isDark,
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Sinyal haptic getar dikirim ke Klimo Wearth via Bluetooth!'),
-                            backgroundColor: AppTheme.primary,
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _buildActionButton(
+                        Icons.vibration,
+                        'Tes getar',
+                        isDark,
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Sinyal haptic getar dikirim ke Klimo Wearth via Bluetooth!'),
+                              backgroundColor: AppTheme.primary,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _buildVibrationPatternCard(isDark),
-              const SizedBox(height: 24),
-            ],
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildVibrationPatternCard(isDark),
+                const SizedBox(height: 24),
+              ],
+            ),
           ),
         ),
       ),
@@ -99,22 +134,74 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   Widget _buildHeader(bool isDark) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.watch, color: AppTheme.primary, size: 22),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.watch, color: AppTheme.primary, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Alat Klimo',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+                Text(
+                  'Manajemen perangkat wearable',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-        const SizedBox(width: 14),
-        Text(
-          'Alat Klimo Wearth',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : AppTheme.textDark,
+        InkWell(
+          onTap: _isLoading ? null : _fetchDeviceData,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkCard : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _isLoading
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+                      )
+                    : const Icon(Icons.refresh, size: 16, color: AppTheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  'Sinkron',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -123,10 +210,22 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   Widget _buildDeviceCard(bool isDark) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return Container(
+        height: 160,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkCard : AppTheme.card,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: const CircularProgressIndicator(),
+      );
     }
 
-    String deviceName = _devices.isNotEmpty ? _devices.first['name'] ?? 'Klimo-A3F2' : 'Belum Ada Alat';
+    // Nama perangkat diprioritaskan dari device yang tersimpan atau API
+    String deviceDisplayName = _savedDeviceName;
+    if (_devices.isNotEmpty && _devices.first['name'] != null) {
+      deviceDisplayName = _devices.first['name'];
+    }
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -143,12 +242,28 @@ class _DeviceScreenState extends State<DeviceScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                deviceName,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 19,
-                  color: isDark ? Colors.white : AppTheme.textDark,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      deviceDisplayName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: isDark ? Colors.white : AppTheme.textDark,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'ESP32-C3 RISC-V Wearable',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Container(
@@ -184,11 +299,19 @@ class _DeviceScreenState extends State<DeviceScreen> {
               const Icon(Icons.battery_std_rounded, color: AppTheme.primary, size: 16),
               const SizedBox(width: 8),
               Text(
-                'Baterai 68%',
+                'Baterai 85%',
                 style: TextStyle(
                   color: isDark ? Colors.white : AppTheme.textDark,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '· Sisa ~14 jam',
+                style: TextStyle(
+                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                  fontSize: 12,
                 ),
               ),
             ],
@@ -197,18 +320,112 @@ class _DeviceScreenState extends State<DeviceScreen> {
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: 0.68,
+              value: 0.85,
               backgroundColor: isDark ? const Color(0xFF101B2B) : AppTheme.greyLight,
               valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
               minHeight: 7,
             ),
           ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _getSyncTimeText(),
+                style: TextStyle(
+                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                  fontSize: 12,
+                ),
+              ),
+              GestureDetector(
+                onTap: () async {
+                  final newDevice = await Navigator.push<String>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const DevicePairingScreen(isEditMode: true),
+                    ),
+                  );
+                  if (newDevice != null && mounted) {
+                    _fetchDeviceData();
+                  }
+                },
+                child: const Text(
+                  'Sambungkan Baru',
+                  style: TextStyle(
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHardwareSpecsCard(bool isDark) {
+    String macAddress = '00:1B:44:11:3A:B7';
+    if (_devices.isNotEmpty && _devices.first['mac_address'] != null) {
+      macAddress = _devices.first['mac_address'];
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.memory, color: AppTheme.primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Spesifikasi Hardware',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 14),
+          _buildSpecRow('MAC Address', macAddress, isDark),
+          _buildSpecRow('Versi Firmware', 'v1.2.0 (PlatformIO / Arduino)', isDark),
+          _buildSpecRow('Konektivitas', 'BLE 5.0 & WiFi 2.4GHz', isDark),
+          _buildSpecRow('Prosesor', 'Espressif ESP32-C3 RISC-V 160MHz', isDark),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpecRow(String label, String value, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
           Text(
-            'Terakhir sinkron: 2 menit lalu',
+            label,
             style: TextStyle(
-              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
               fontSize: 13,
+              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white : AppTheme.textDark,
             ),
           ),
         ],
@@ -230,7 +447,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Status sensor',
+            'Status Sensor Fisik',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 16,
@@ -238,11 +455,11 @@ class _DeviceScreenState extends State<DeviceScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          _buildSensorRow(Icons.wb_sunny_outlined, 'UV', isDark),
-          _buildSensorRow(Icons.lightbulb_outline, 'Cahaya', isDark),
-          _buildSensorRow(Icons.thermostat_outlined, 'Suhu & kelembapan', isDark),
-          _buildSensorRow(Icons.air, 'Gas VOC', isDark),
-          _buildSensorRow(Icons.timeline, 'Accelerometer', isDark),
+          _buildSensorRow(Icons.wb_sunny_outlined, 'Sensor UV (LTR-390 / Analog)', isDark),
+          _buildSensorRow(Icons.lightbulb_outline, 'Sensor Cahaya (Ambient Lux)', isDark),
+          _buildSensorRow(Icons.thermostat_outlined, 'Suhu & Kelembapan (SHT40 I2C)', isDark),
+          _buildSensorRow(Icons.air, 'Gas VOC & Udara (SGP41)', isDark),
+          _buildSensorRow(Icons.timeline, 'Accelerometer (Gerak Pengguna)', isDark),
         ],
       ),
     );
@@ -250,7 +467,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   Widget _buildSensorRow(IconData icon, String name, bool isDark) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 11),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -266,7 +483,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 name,
                 style: TextStyle(
                   color: isDark ? Colors.white : AppTheme.textDark,
-                  fontSize: 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -277,11 +494,11 @@ class _DeviceScreenState extends State<DeviceScreen> {
               Icon(Icons.circle, color: AppTheme.primary, size: 7),
               SizedBox(width: 6),
               Text(
-                'Aktif',
+                'Normal',
                 style: TextStyle(
                   color: AppTheme.primary,
                   fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  fontSize: 12,
                 ),
               ),
             ],
@@ -304,13 +521,26 @@ class _DeviceScreenState extends State<DeviceScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'Mode hemat daya',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              color: isDark ? Colors.white : AppTheme.textDark,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Mode hemat daya',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Interval pengiriman: 10 detik',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                ),
+              ),
+            ],
           ),
           Switch(
             value: _powerSaving,
@@ -318,6 +548,16 @@ class _DeviceScreenState extends State<DeviceScreen> {
               setState(() {
                 _powerSaving = val;
               });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    val
+                        ? 'Mode hemat daya aktif. Interval transmisi 10 detik.'
+                        : 'Mode performa tinggi aktif. Interval transmisi 2 detik.',
+                  ),
+                  duration: const Duration(milliseconds: 1500),
+                ),
+              );
             },
             activeThumbColor: Colors.white,
             activeTrackColor: AppTheme.primary,
@@ -361,7 +601,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Pola getar',
+            'Pola Peringatan Getar (Haptic)',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 16,
@@ -373,15 +613,15 @@ class _DeviceScreenState extends State<DeviceScreen> {
             spacing: 14,
             runSpacing: 10,
             children: [
-              _buildPatternLegend(AppTheme.primary, 'UV: 2 pendek', isDark),
+              _buildPatternLegend(AppTheme.primary, 'UV: 2 getar pendek', isDark),
               _buildPatternLegend(
                 isDark ? AppTheme.darkTextSecondary : const Color(0xFFF59E0B),
-                'Panas: 1 panjang',
+                'Panas: 1 getar panjang',
                 isDark,
               ),
               _buildPatternLegend(
-                isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                'Udara: 3 pendek',
+                isDark ? AppTheme.darkTextSecondary : const Color(0xFFEF4444),
+                'Udara: 3 getar pendek',
                 isDark,
               ),
             ],

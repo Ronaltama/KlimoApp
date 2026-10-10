@@ -49,6 +49,60 @@ class ApiService {
     return prefs.getString('auth_token');
   }
 
+  /// Mengecek apakah user sudah menyelesaikan setup awal (pairing & tipe kulit)
+  static Future<bool> isOnboardingCompleted() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('is_onboarding_completed') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Menandai apakah user sudah menyelesaikan setup awal
+  static Future<void> setOnboardingCompleted(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_onboarding_completed', value);
+    } catch (_) {}
+  }
+
+  /// Menyimpan tipe kulit yang dipilih pengguna
+  static Future<void> saveSkinType(String type) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_skin_type', type);
+    } catch (_) {}
+  }
+
+  /// Mengambil tipe kulit yang tersimpan (default: Tipe IV)
+  static Future<String> getSkinType() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('user_skin_type') ?? 'Tipe IV';
+    } catch (_) {
+      return 'Tipe IV';
+    }
+  }
+
+  /// Menyimpan nama perangkat yang terhubung
+  static Future<void> saveConnectedDevice(String deviceName) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('connected_device', deviceName);
+    } catch (_) {}
+  }
+
+  /// Mengambil nama perangkat yang terhubung
+  static Future<String> getConnectedDevice() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('connected_device') ?? 'Klimo Wearth C3-4A1B';
+    } catch (_) {
+      return 'Klimo Wearth C3-4A1B';
+    }
+  }
+
   // Fungsi Login
   static Future<Map<String, dynamic>> login(String email, String password) async {
     try {
@@ -174,5 +228,46 @@ class ApiService {
       }
     } catch (_) {}
     return [];
+  }
+
+  // Fungsi Update Profil Pengguna
+  static Future<Map<String, dynamic>> updateProfile(String name) async {
+    try {
+      final baseUrl = await getBaseUrl();
+      final token = await getToken();
+      final response = await http.put(
+        Uri.parse('$baseUrl/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'name': name}),
+      ).timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'success': true, 'data': data['data']};
+      }
+    } catch (_) {}
+    return {'success': false, 'message': 'Gagal memperbarui profil'};
+  }
+
+  // Fungsi Logout (Revoke Token di Server)
+  static Future<bool> logout() async {
+    try {
+      final baseUrl = await getBaseUrl();
+      final token = await getToken();
+      if (token != null && token.isNotEmpty) {
+        await http.post(
+          Uri.parse('$baseUrl/logout'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        ).timeout(const Duration(seconds: 4));
+      }
+    } catch (_) {}
+    await saveToken('');
+    return true;
   }
 }
