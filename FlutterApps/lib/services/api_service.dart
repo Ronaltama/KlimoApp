@@ -115,7 +115,12 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        await saveToken(data['token'] ?? '');
+        final token = data['token'] ?? data['data']?['token'] ?? '';
+        await saveToken(token);
+        if (data['data']?['user']?['id'] != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt('user_id', data['data']['user']['id'] as int);
+        }
         return {'success': true, 'data': data};
       } else {
         return {'success': false, 'message': 'Email atau password salah'};

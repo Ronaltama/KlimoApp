@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 
 use App\Models\Telemetry;
 use App\Models\Device;
+use App\Models\User;
 
 class TelemetryController extends Controller
 {
@@ -18,7 +19,7 @@ class TelemetryController extends Controller
     {
         $request->validate([
             'mac_address' => 'required|string',
-            'user_id' => 'required|exists:users,id',
+            'user_id' => 'nullable|integer',
             'uv_index' => 'nullable|numeric',
             'temperature' => 'nullable|numeric',
             'humidity' => 'nullable|numeric',
@@ -27,9 +28,19 @@ class TelemetryController extends Controller
             'longitude' => 'nullable|numeric',
         ]);
 
+        $userId = $request->user_id ?? 1;
+        if (!User::where('id', $userId)->exists()) {
+            $fallback = User::first();
+            $userId = $fallback ? $fallback->id : User::create([
+                'name' => 'Demo User',
+                'email' => 'demo@klimo.app',
+                'password' => bcrypt('password123'),
+            ])->id;
+        }
+
         $device = Device::firstOrCreate(
             ['mac_address' => $request->mac_address],
-            ['user_id' => $request->user_id, 'name' => 'Klimo Device']
+            ['user_id' => $userId, 'name' => 'Klimo Device']
         );
 
         // Ambil rekaman telemetri terakhir dari perangkat ini
@@ -83,7 +94,7 @@ class TelemetryController extends Controller
         if ($shouldSave) {
             $telemetry = new Telemetry([
                 'device_id'   => $device->id,
-                'user_id'     => $request->user_id,
+                'user_id'     => $userId,
                 'uv_index'    => $request->uv_index,
                 'temperature' => $request->temperature,
                 'humidity'    => $request->humidity,
@@ -94,7 +105,9 @@ class TelemetryController extends Controller
 
             // Jika HP mengirim timestamp perekaman saat offline, gunakan timestamp tersebut
             if ($request->filled('timestamp') || $request->filled('recorded_at')) {
-                $telemetry->created_at = $request->input('timestamp') ?? $request->input('recorded_at');
+                $ts = $request->input('timestamp') ?? $request->input('recorded_at');
+                $telemetry->created_at = $ts;
+                $telemetry->updated_at = $ts;
             }
 
             $telemetry->save();
@@ -124,7 +137,7 @@ class TelemetryController extends Controller
         $request->validate([
             'readings' => 'required|array',
             'readings.*.mac_address' => 'required|string',
-            'readings.*.user_id' => 'required|exists:users,id',
+            'readings.*.user_id' => 'nullable|integer',
             'readings.*.uv_index' => 'nullable|numeric',
             'readings.*.temperature' => 'nullable|numeric',
             'readings.*.humidity' => 'nullable|numeric',
@@ -134,16 +147,29 @@ class TelemetryController extends Controller
             'readings.*.timestamp' => 'nullable|string',
         ]);
 
+        $defaultUserId = User::first()?->id ?? 1;
+        if (!User::where('id', $defaultUserId)->exists()) {
+            $defaultUserId = User::create([
+                'name' => 'Demo User',
+                'email' => 'demo@klimo.app',
+                'password' => bcrypt('password123'),
+            ])->id;
+        }
+
         $savedCount = 0;
         foreach ($request->readings as $item) {
+            $itemUserId = (!empty($item['user_id']) && User::where('id', $item['user_id'])->exists())
+                ? (int)$item['user_id']
+                : $defaultUserId;
+
             $device = Device::firstOrCreate(
                 ['mac_address' => $item['mac_address']],
-                ['user_id' => $item['user_id'], 'name' => 'Klimo Device']
+                ['user_id' => $itemUserId, 'name' => 'Klimo Device']
             );
 
             $telemetry = new Telemetry([
                 'device_id'   => $device->id,
-                'user_id'     => $item['user_id'],
+                'user_id'     => $itemUserId,
                 'uv_index'    => $item['uv_index'] ?? null,
                 'temperature' => $item['temperature'] ?? null,
                 'humidity'    => $item['humidity'] ?? null,
@@ -154,6 +180,7 @@ class TelemetryController extends Controller
 
             if (!empty($item['timestamp'])) {
                 $telemetry->created_at = $item['timestamp'];
+                $telemetry->updated_at = $item['timestamp'];
             }
 
             $telemetry->save();
