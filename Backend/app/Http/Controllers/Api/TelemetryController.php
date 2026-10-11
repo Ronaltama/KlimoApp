@@ -81,7 +81,7 @@ class TelemetryController extends Controller
         }
 
         if ($shouldSave) {
-            $telemetry = Telemetry::create([
+            $telemetry = new Telemetry([
                 'device_id'   => $device->id,
                 'user_id'     => $request->user_id,
                 'uv_index'    => $request->uv_index,
@@ -91,6 +91,13 @@ class TelemetryController extends Controller
                 'latitude'    => $request->latitude,
                 'longitude'   => $request->longitude,
             ]);
+
+            // Jika HP mengirim timestamp perekaman saat offline, gunakan timestamp tersebut
+            if ($request->filled('timestamp') || $request->filled('recorded_at')) {
+                $telemetry->created_at = $request->input('timestamp') ?? $request->input('recorded_at');
+            }
+
+            $telemetry->save();
 
             return response()->json([
                 'status'  => 'saved',
@@ -107,6 +114,57 @@ class TelemetryController extends Controller
             'message' => 'Data sensor stabil / tidak berubah signifikan. Baris database dilewati untuk efisiensi penyimpanan.',
             'data'    => $last
         ], 200);
+    }
+
+    /**
+     * Sinkronisasi kumpulan data offline sekaligus dari HP (Batch Sync)
+     */
+    public function batchStore(Request $request)
+    {
+        $request->validate([
+            'readings' => 'required|array',
+            'readings.*.mac_address' => 'required|string',
+            'readings.*.user_id' => 'required|exists:users,id',
+            'readings.*.uv_index' => 'nullable|numeric',
+            'readings.*.temperature' => 'nullable|numeric',
+            'readings.*.humidity' => 'nullable|numeric',
+            'readings.*.voc' => 'nullable|integer',
+            'readings.*.latitude' => 'nullable|numeric',
+            'readings.*.longitude' => 'nullable|numeric',
+            'readings.*.timestamp' => 'nullable|string',
+        ]);
+
+        $savedCount = 0;
+        foreach ($request->readings as $item) {
+            $device = Device::firstOrCreate(
+                ['mac_address' => $item['mac_address']],
+                ['user_id' => $item['user_id'], 'name' => 'Klimo Device']
+            );
+
+            $telemetry = new Telemetry([
+                'device_id'   => $device->id,
+                'user_id'     => $item['user_id'],
+                'uv_index'    => $item['uv_index'] ?? null,
+                'temperature' => $item['temperature'] ?? null,
+                'humidity'    => $item['humidity'] ?? null,
+                'voc'         => $item['voc'] ?? null,
+                'latitude'    => $item['latitude'] ?? null,
+                'longitude'   => $item['longitude'] ?? null,
+            ]);
+
+            if (!empty($item['timestamp'])) {
+                $telemetry->created_at = $item['timestamp'];
+            }
+
+            $telemetry->save();
+            $savedCount++;
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Berhasil menyinkronkan $savedCount data telemetri offline.",
+            'synced_count' => $savedCount
+        ], 201);
     }
 
     public function heatmap()

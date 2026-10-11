@@ -12,6 +12,7 @@ Route::post('/login', [AuthController::class, 'login'])->name('login');
 
 // IoT & Telemetry Routes (Accessible for demo & app live stream)
 Route::post('/telemetry', [TelemetryController::class, 'store']);
+Route::post('/telemetry/batch', [TelemetryController::class, 'batchStore']);
 Route::get('/telemetry/latest', [TelemetryController::class, 'latest']);
 Route::get('/telemetry/history', [TelemetryController::class, 'history']);
 Route::get('/map/heatmap', [TelemetryController::class, 'heatmap']);

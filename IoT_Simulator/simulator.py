@@ -1,4 +1,22 @@
 #!/usr/bin/env python3
+#
+# simulator.py - Klimo Wearth Backend Injector
+#
+# CATATAN ARSITEKTUR (Offline-First / Huawei Health Style):
+# =========================================================
+# Script ini bukan jalur data UTAMA aplikasi. Jalur data utama adalah:
+#   Alat ESP32 --[BLE]--> HP (Lokal) --[sync jika ada internet]--> Backend
+#
+# Script ini digunakan untuk 2 skenario khusus:
+#   1. DEMO FULL-STACK di laptop: Mengisi database Backend dengan data dummy
+#      sehingga fitur Peta Komunitas (Heatmap) di aplikasi bisa ditampilkan.
+#   2. POPULASI AWAL BACKEND: Mengisi data awal di server cloud untuk
+#      pengujian fitur komunitas multi-pengguna.
+#
+# Untuk demo aplikasi standalone (tanpa backend), gunakan tombol "Mode"
+# di dalam aplikasi Flutter - BleSimulatorService akan men-generate
+# data langsung di HP dan menyimpannya ke SQLite lokal.
+
 import time
 import random
 import requests

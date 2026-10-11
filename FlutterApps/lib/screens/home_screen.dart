@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../theme/app_theme.dart';
 import 'uv_detail_screen.dart';
-import '../services/api_service.dart';
+import '../services/local_data_service.dart';
+import '../services/ble_simulator_service.dart';
+import '../services/sync_manager.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,46 +14,263 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  Map<String, dynamic>? telemetryData;
-  Timer? _timer;
+  TelemetryRecord? _telemetryRecord;
+  Timer? _uiRefreshTimer;
+  StreamSubscription<TelemetryRecord>? _bleSubscription;
+  StreamSubscription<BleConnectionStatus>? _statusSubscription;
+
+  final _ble = BleSimulatorService();
+  final _sync = SyncManager();
+
+  BleConnectionStatus _bleStatus = BleConnectionStatus.disconnected;
+  SyncStatus _syncStatus = SyncStatus.idle;
+  int _pendingSync = 0;
 
   @override
   void initState() {
     super.initState();
-    _fetchData();
-    // Tarik data setiap 3 detik
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _fetchData());
+    _initOfflineFirst();
+  }
+
+  Future<void> _initOfflineFirst() async {
+    // 1. Tampilkan data lokal yang sudah ada (langsung dari SQLite HP)
+    final cached = await LocalDataService.getLatest();
+    if (cached != null && mounted) {
+      setState(() => _telemetryRecord = cached);
+    }
+
+    // 2. Subscribe ke stream BLE simulator untuk update realtime
+    _bleSubscription = _ble.recordStream.listen((record) {
+      if (mounted) setState(() => _telemetryRecord = record);
+    });
+    _statusSubscription = _ble.statusStream.listen((status) {
+      if (mounted) setState(() => _bleStatus = status);
+    });
+
+    // 3. Subscribe ke SyncManager untuk status cloud sync
+    _sync.statusStream.listen((s) {
+      if (mounted) setState(() => _syncStatus = s);
+    });
+    _sync.pendingCountStream.listen((c) {
+      if (mounted) setState(() => _pendingSync = c);
+    });
+
+    // 4. Inisialisasi sync manager (auto-sync tiap 30 detik jika ada internet)
+    _sync.initialize();
+
+    // 5. Auto-mulai simulasi BLE virtual (mode demo)
+    _ble.startSimulation(mode: BleSimMode.auto);
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _bleSubscription?.cancel();
+    _statusSubscription?.cancel();
+    _uiRefreshTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _fetchData() async {
-    final data = await ApiService.getLatestTelemetry();
-    if (data != null && mounted) {
-      setState(() {
-        telemetryData = data;
-      });
-    }
+  // Konversi TelemetryRecord ke Map agar widget lama tetap kompatibel
+  Map<String, dynamic>? get telemetryData {
+    if (_telemetryRecord == null) return null;
+    return {
+      'uv_index': _telemetryRecord!.uvIndex,
+      'temperature': _telemetryRecord!.temperature,
+      'humidity': _telemetryRecord!.humidity,
+      'voc': _telemetryRecord!.voc,
+      'latitude': _telemetryRecord!.latitude,
+      'longitude': _telemetryRecord!.longitude,
+      'created_at': _telemetryRecord!.timestamp.toIso8601String(),
+    };
   }
 
   String _getSyncText() {
-    if (telemetryData == null) return 'MENUNGGU DATA';
-    final createdAtStr = telemetryData!['created_at'];
-    if (createdAtStr == null) return 'LIVE STREAM';
-    try {
-      final dt = DateTime.parse(createdAtStr.toString()).toLocal();
-      final diff = DateTime.now().difference(dt);
-      if (diff.inSeconds < 10) return 'BARU SAJA';
-      if (diff.inSeconds < 60) return '${diff.inSeconds} DETIK LALU';
-      if (diff.inMinutes < 60) return '${diff.inMinutes} MNT LALU';
-      return '${diff.inHours} JAM LALU';
-    } catch (_) {
-      return 'TERHUBUNG';
+    if (_telemetryRecord == null) return 'MENUNGGU DATA';
+    switch (_bleStatus) {
+      case BleConnectionStatus.scanning:
+        return 'SCANNING...';
+      case BleConnectionStatus.connected:
+        return 'BLE LIVE';
+      case BleConnectionStatus.simulating:
+        final diff = DateTime.now().difference(_telemetryRecord!.timestamp);
+        if (diff.inSeconds < 5) return 'BARU SAJA';
+        if (diff.inSeconds < 60) return '${diff.inSeconds} DTK LALU';
+        if (diff.inMinutes < 60) return '${diff.inMinutes} MNT LALU';
+        return '${diff.inHours} JAM LALU';
+      case BleConnectionStatus.disconnected:
+        return 'LOKAL HP';
     }
+  }
+
+  Color _getSyncColor() {
+    switch (_bleStatus) {
+      case BleConnectionStatus.simulating:
+      case BleConnectionStatus.connected:
+        return AppTheme.primary;
+      case BleConnectionStatus.scanning:
+        return Colors.orange;
+      case BleConnectionStatus.disconnected:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getSyncIcon() {
+    switch (_bleStatus) {
+      case BleConnectionStatus.simulating:
+      case BleConnectionStatus.connected:
+        return Icons.bluetooth_connected;
+      case BleConnectionStatus.scanning:
+        return Icons.bluetooth_searching;
+      case BleConnectionStatus.disconnected:
+        return Icons.storage_outlined;
+    }
+  }
+
+  Widget _buildCloudStatusBadge(bool isDark) {
+    final (icon, color, text) = _getCloudStatusInfo(isDark);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 11,
+            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+          ),
+        ),
+      ],
+    );
+  }
+
+  (IconData, Color, String) _getCloudStatusInfo(bool isDark) {
+    final defaultColor = isDark ? AppTheme.darkTextSecondary : AppTheme.textLight;
+    if (_pendingSync == 0) {
+      return (Icons.cloud_done_outlined, AppTheme.primary, 'Tersinkronisasi');
+    }
+    switch (_syncStatus) {
+      case SyncStatus.syncing:
+        return (Icons.cloud_upload_outlined, AppTheme.primary, 'Mengunggah...');
+      case SyncStatus.noInternet:
+        return (Icons.cloud_off_outlined, defaultColor, '$_pendingSync tertahan');
+      case SyncStatus.error:
+        return (Icons.error_outline, const Color(0xFFEF4444), 'Gagal sync');
+      default:
+        return (Icons.schedule, defaultColor, '$_pendingSync menunggu');
+    }
+  }
+
+  void _showSimModeDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkCard : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.tune, color: AppTheme.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Mode Simulasi BLE',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: isDark ? Colors.white : AppTheme.textDark,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Pilih kondisi lingkungan yang disimulasikan',
+                style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+              ),
+              const SizedBox(height: 20),
+              ..._buildModeOptions(isDark, ctx),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildModeOptions(bool isDark, BuildContext ctx) {
+    final options = [
+      (
+        BleSimMode.auto,
+        'Otomatis (Fluktuatif Realistis)',
+        'UV 0.5–11.5 • Suhu 25–38°C • VOC 30–450',
+        AppTheme.primary,
+        Icons.autorenew,
+      ),
+      (
+        BleSimMode.normal,
+        'Normal / Sejuk',
+        'UV 1.0–2.5 • Suhu 26–28°C • VOC 40–90',
+        const Color(0xFF10B981),
+        Icons.wb_sunny_outlined,
+      ),
+      (
+        BleSimMode.uvExtreme,
+        'Panas Ekstrem (UV Bahaya)',
+        'UV 10.0–11.8 • Suhu 36–39°C • VOC 100–160',
+        const Color(0xFFEF4444),
+        Icons.warning_amber_rounded,
+      ),
+      (
+        BleSimMode.pollution,
+        'Polusi Udara (VOC Tinggi)',
+        'UV 2.5–4.0 • Suhu 29–32°C • VOC 380–480',
+        const Color(0xFFF59E0B),
+        Icons.air,
+      ),
+    ];
+
+    return options.map((opt) {
+      final (mode, title, desc, color, icon) = opt;
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white : AppTheme.textDark,
+          ),
+        ),
+        subtitle: Text(
+          desc,
+          style: TextStyle(
+            fontSize: 12,
+            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+          ),
+        ),
+        onTap: () {
+          _ble.changeMode(mode);
+          Navigator.pop(ctx);
+        },
+      );
+    }).toList();
   }
 
   @override
@@ -67,7 +286,9 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(context, isDark),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+              _buildConnectionBanner(isDark),
+              const SizedBox(height: 12),
               _buildWaspadaCard(isDark),
               const SizedBox(height: 16),
               Row(
@@ -95,6 +316,78 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Banner status koneksi BLE + Cloud Sync (baru)
+  Widget _buildConnectionBanner(bool isDark) {
+    final bleColor = _getSyncColor();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Status BLE
+          Icon(_getSyncIcon(), size: 16, color: bleColor),
+          const SizedBox(width: 6),
+          Text(
+            _bleStatus == BleConnectionStatus.simulating
+                ? 'Simulator BLE'
+                : _bleStatus == BleConnectionStatus.connected
+                    ? 'Klimo-A3F2'
+                    : 'Tidak Tersambung',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: bleColor,
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Indikator berkedip (dot animasi)
+          if (_bleStatus == BleConnectionStatus.simulating ||
+              _bleStatus == BleConnectionStatus.connected)
+            Container(
+              width: 7, height: 7,
+              decoration: BoxDecoration(
+                color: AppTheme.primary,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: AppTheme.primary.withValues(alpha: 0.5), blurRadius: 6),
+                ],
+              ),
+            ),
+          const Spacer(),
+          // Status Cloud Sync
+          _buildCloudStatusBadge(isDark),
+          const SizedBox(width: 8),
+          // Tombol mode simulasi
+          GestureDetector(
+            onTap: _showSimModeDialog,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F2237) : const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4)),
+              ),
+              child: Text(
+                'Mode',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.primary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeader(BuildContext context, bool isDark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -104,9 +397,7 @@ class _HomeScreenState extends State<HomeScreen> {
             CircleAvatar(
               radius: 22,
               backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFD1FAE5),
-              child: isDark
-                  ? const Text('👨🏽‍💼', style: TextStyle(fontSize: 20))
-                  : const Icon(Icons.person, color: AppTheme.primary),
+              child: const Icon(Icons.person, color: AppTheme.primary),
             ),
             const SizedBox(width: 12),
             Column(
@@ -141,16 +432,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 Row(
                   children: [
                     Icon(
-                      Icons.sync,
+                      _getSyncIcon(),
                       size: 13,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                      color: _getSyncColor(),
                     ),
                     const SizedBox(width: 4),
                     Text(
                       _getSyncText(),
                       style: TextStyle(
                         fontSize: 10,
-                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                        color: _getSyncColor(),
                         fontWeight: FontWeight.bold,
                       ),
                     ),

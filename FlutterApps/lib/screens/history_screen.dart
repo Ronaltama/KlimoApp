@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/local_data_service.dart';
 import '../services/api_service.dart';
+import '../services/ble_simulator_service.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -13,6 +15,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   bool _isWeekly = true;
   List<dynamic> _historyData = [];
   bool _isLoading = true;
+  bool _isFromLocal = false; // indikator sumber data
 
   double _peakUv = 8.5;
   double _avgTemp = 31.2;
@@ -22,22 +25,46 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void initState() {
     super.initState();
     _fetchHistoryData();
+    // Subscribe ke stream BLE untuk auto-refresh riwayat saat data baru masuk
+    BleSimulatorService().recordStream.listen((_) {
+      if (mounted && _isFromLocal) _fetchHistoryData();
+    });
   }
 
   Future<void> _fetchHistoryData() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
-    final data = await ApiService.getHistoryData();
+    // Coba ambil dari lokal HP terlebih dahulu (Offline-First)
+    final localData = await LocalDataService.getHistory(limit: 100);
 
-    if (!mounted) return;
+    if (localData.isNotEmpty) {
+      // Ada data lokal — tampilkan langsung tanpa internet
+      final mapped = localData.map((r) => {
+        'uv_index': r.uvIndex,
+        'temperature': r.temperature,
+        'humidity': r.humidity,
+        'voc': r.voc,
+        'created_at': r.timestamp.toIso8601String(),
+      }).toList();
 
-    setState(() {
-      _historyData = data;
-      _isLoading = false;
-      _calculateMetrics();
-    });
+      if (!mounted) return;
+      setState(() {
+        _historyData = mapped;
+        _isLoading = false;
+        _isFromLocal = true;
+        _calculateMetrics();
+      });
+    } else {
+      // Lokal kosong (belum ada data BLE) — fallback ke API backend
+      final data = await ApiService.getHistoryData();
+      if (!mounted) return;
+      setState(() {
+        _historyData = data;
+        _isLoading = false;
+        _isFromLocal = false;
+        _calculateMetrics();
+      });
+    }
   }
 
   void _calculateMetrics() {

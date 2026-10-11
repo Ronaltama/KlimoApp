@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/ble_simulator_service.dart';
+import '../services/local_data_service.dart';
+import '../services/sync_manager.dart';
 import 'setup/device_pairing_screen.dart';
 
 class DeviceScreen extends StatefulWidget {
@@ -13,48 +16,61 @@ class DeviceScreen extends StatefulWidget {
 class _DeviceScreenState extends State<DeviceScreen> {
   bool _powerSaving = true;
   List<dynamic> _devices = [];
-  Map<String, dynamic>? _latestTelemetry;
   String _savedDeviceName = 'Klimo Wearth C3-4A1B';
   bool _isLoading = true;
+
+  final _ble = BleSimulatorService();
+  final _sync = SyncManager();
+  BleConnectionStatus _bleStatus = BleConnectionStatus.disconnected;
+  int _pendingSync = 0;
+  int _localRecordCount = 0;
 
   @override
   void initState() {
     super.initState();
     _fetchDeviceData();
+    // Subscribe ke status BLE
+    _ble.statusStream.listen((s) {
+      if (mounted) setState(() => _bleStatus = s);
+    });
+    _sync.pendingCountStream.listen((c) {
+      if (mounted) setState(() => _pendingSync = c);
+    });
   }
 
   Future<void> _fetchDeviceData() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     final devicesData = await ApiService.getDevices();
     final savedName = await ApiService.getConnectedDevice();
-    final latestTel = await ApiService.getLatestTelemetry();
+    final history = await LocalDataService.getHistory(limit: 1000);
+    final pendingCount = await LocalDataService.countPendingSync();
 
     if (!mounted) return;
 
     setState(() {
       _devices = devicesData;
       _savedDeviceName = savedName;
-      _latestTelemetry = latestTel;
+      _localRecordCount = history.length;
+      _pendingSync = pendingCount;
       _isLoading = false;
     });
   }
 
   String _getSyncTimeText() {
-    if (_latestTelemetry == null || _latestTelemetry!['created_at'] == null) {
-      return 'Terakhir sinkron: Baru saja';
-    }
-    try {
-      final dt = DateTime.parse(_latestTelemetry!['created_at'].toString()).toLocal();
-      final diff = DateTime.now().difference(dt);
-      if (diff.inSeconds < 10) return 'Terakhir sinkron: Baru saja';
-      if (diff.inSeconds < 60) return 'Terakhir sinkron: ${diff.inSeconds} detik lalu';
-      if (diff.inMinutes < 60) return 'Terakhir sinkron: ${diff.inMinutes} menit lalu';
-      return 'Terakhir sinkron: ${diff.inHours} jam lalu';
-    } catch (_) {
-      return 'Terakhir sinkron: Aktif via BLE';
+    // Tampilkan status BLE + sinkronisasi lokal
+    switch (_bleStatus) {
+      case BleConnectionStatus.simulating:
+        return 'Simulator BLE Aktif • $_pendingSync data pending sync';
+      case BleConnectionStatus.connected:
+        return 'BLE Tersambung • $_pendingSync data pending sync';
+      case BleConnectionStatus.scanning:
+        return 'Sedang mencari perangkat BLE...';
+      case BleConnectionStatus.disconnected:
+        if (_localRecordCount > 0) {
+          return '$_localRecordCount data tersimpan lokal • $_pendingSync belum tersinkron';
+        }
+        return 'Perangkat tidak tersambung';
     }
   }
 

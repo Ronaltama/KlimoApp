@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "author": "Klimo Wearth",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-c3-devkitm-1",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot_uv",
+      "top": -120,
+      "left": 140,
+      "attrs": { "label": "Sensor UV (GPIO 2)" }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot_temp",
+      "top": 140,
+      "left": 140,
+      "attrs": { "label": "Sensor Suhu (GPIO 3)" }
+    }
+  ],
+  "connections": [
+    [ "esp:3V3", "pot_uv:VCC", "red", [ "v0" ] ],
+    [ "esp:GND.1", "pot_uv:GND", "black", [ "v0" ] ],
+    [ "esp:2", "pot_uv:SIG", "green", [ "v0" ] ],
+    [ "esp:3V3", "pot_temp:VCC", "red", [ "v0" ] ],
+    [ "esp:GND.2", "pot_temp:GND", "black", [ "v0" ] ],
+    [ "esp:3", "pot_temp:SIG", "orange", [ "v0" ] ]
+  ],
+  "dependencies": {}
+}

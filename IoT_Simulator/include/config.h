@@ -28,8 +28,11 @@
 #define I2C_SDA_PIN 4
 #define I2C_SCL_PIN 5
 
-// Pin Analog untuk Sensor UV Analog (opsional jika bukan I2C LTR-390)
+// Pin Analog untuk Sensor UV Analog / Potentiometer Wokwi
 #define UV_ADC_PIN 2
+
+// Pin Analog untuk Potentiometer Suhu Wokwi
+#define TEMP_ADC_PIN 3
 
 // Interval pengiriman data ke server (milidetik)
 #define TELEMETRY_INTERVAL_MS 5000

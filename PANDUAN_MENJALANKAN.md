@@ -1,180 +1,157 @@
-# 🌿 Panduan Menjalankan Ekosistem KlimoApp
+# Panduan Menjalankan Ekosistem KlimoApp (Klimo Wearth)
 
-Dokumentasi lengkap untuk menjalankan 3 komponen utama proyek **KlimoApp (Klimo Wearth)**:
-1. 🗄️ **Backend** (Laravel 13 REST API)
-2. 🛰️ **IoT_Simulator** (Python Simulator & Firmware ESP32-C3)
-3. 📱 **FlutterApps** (Aplikasi Mobile & Desktop Flutter)
-
----
-
-## 📋 Prasyarat Sistem (Prerequisites)
-
-Pastikan peralatan berikut sudah terpasang di komputer Anda:
-- **PHP 8.2+** & **Composer**
-- **MySQL / MariaDB** (Sudah berjalan, database: `klimo_db`)
-- **Python 3** & library `requests` (`pip install requests`)
-- **Flutter SDK** (Channel stable)
-- *(Opsional untuk hardware fisik)* **PlatformIO CLI** (`pio`)
+Dokumentasi resmi untuk menjalankan seluruh komponen proyek **KlimoApp**:
+1. **IoT Firmware & Simulator** (ESP32-C3 Firmware, Arduino IDE, PlatformIO, Wokwi, dan Python)
+2. **Flutter Mobile & Desktop App** (Arsitektur Offline-First / Huawei Health Style)
+3. **Backend Cloud Server** (Laravel 13 REST API & MySQL)
 
 ---
 
-## ⚡ Opsi 1: Cara Instan (All-in-One Runner Script)
+## 1. Prasyarat Sistem (Prerequisites)
 
-Di direktori utama proyek, sudah disediakan skrip otomatis `run_demo.sh`:
+Pastikan peralatan berikut tersedia di komputer Anda:
+* **Flutter SDK** (Versi 3.13+)
+* **PHP 8.2+** & **Composer**
+* **MySQL / MariaDB** (Database: `klimo_db`)
+* **Python 3** & library `requests` (untuk testing backend injector)
+* *(Untuk Flash Board Fisik)* **PlatformIO Core CLI** (`pio`) atau **Arduino IDE**
+
+---
+
+## 2. Cara Cepat: Skrip Demo Terpadu (`run_demo.sh`)
+
+Gunakan skrip terpadu di root direktori untuk menjalankan berbagai skenario:
 
 ```bash
 cd /home/ronaltama/PROJECT/KlimoApp
 ./run_demo.sh
 ```
 
-Menu interaktif akan muncul:
+Menu interaktif yang tersedia:
 ```text
-  [1] Nyalakan Backend Laravel Saja (host: 0.0.0.0:8000)
-  [2] Nyalakan IoT Python Simulator Saja
-  [3] Nyalakan Flutter Mobile App Saja
-  [4] Nyalakan SEMUA (Full Stack Demo) (Laravel + Simulator + Flutter)
-  [5] PlatformIO: Build / Compile Firmware ESP32-C3
-  [6] PlatformIO: Upload / Flash ke Board ESP32-C3
-  [7] PlatformIO: Buka Serial Monitor (115200 baud)
+  [1] Jalankan Aplikasi Flutter Saja (Offline-First / Demo Langsung)
+  [2] Flash Firmware ke Board ESP32 (PlatformIO Upload via USB)
+  [3] Buka Serial Monitor ESP32 (115200 baud)
+  [4] Kompilasi / Validasi Firmware ESP32 (pio run)
+  [5] Jalankan Backend Laravel Saja (host: 0.0.0.0:8000)
+  [6] Full Stack Demo (Backend Laravel + Flutter App)
+  [7] Jalankan Python Simulator (Backend Data Injector)
+  [8] Info Panduan Demo Lomba & Web Controller ESP32
 ```
-
-> **Tips:** Pilih opsi `[4]` untuk langsung menjalankan Backend + IoT Simulator di background, lalu membuka aplikasi Flutter. Ketika aplikasi Flutter ditutup, proses background akan otomatis dimatikan.
 
 ---
 
-## 🛠️ Opsi 2: Cara Manual (3 Terminal Terpisah)
+## 3. Panduan Demo Lomba (3 Tingkat)
 
-Jika Anda ingin melihat log dari masing-masing komponen secara independen, buka **3 tab / jendela terminal terpisah**:
+Strategi demonstrasi terstruktur untuk presentasi di depan dewan juri lomba:
 
-### 1️⃣ Terminal 1: Menjalankan Backend (Laravel)
+### Tingkat 1: Demo Utama (Hardware ESP32 Mandiri)
+1. Colokkan board ESP32 ke laptop atau power bank portabel melalui kabel USB (tidak memerlukan modul sensor fisik eksternal).
+2. ESP32 secara otomatis memancarkan:
+   * **Bluetooth BLE:** Nama perangkat `Klimo-A3F2`.
+   * **Hotspot WiFi:** SSID `Klimo-Simulator`, Password `klimo123`.
+3. Hubungkan laptop atau ponsel kedua ke WiFi `Klimo-Simulator`.
+4. Buka browser dan akses alamat:
+   ```text
+   http://192.168.4.1
+   ```
+5. Layar **Web Controller** interaktif akan muncul. Geser slider (UV, Suhu, Kelembaban, VOC) atau klik tombol preset (**Normal**, **UV Ekstrem**, **Polusi Gas**).
+6. Buka aplikasi Klimo Wearth di ponsel utama. Aplikasi langsung mendeteksi pergerakan nilai secara live tanpa jeda.
 
-Direktori: `Backend/`
+### Tingkat 2: Visualisasi Proposal & Slide Presentasi (Wokwi)
+1. Buka berkas [IoT_Simulator/diagram.json](IoT_Simulator/diagram.json) menggunakan ekstensi **Wokwi Simulator** di VS Code atau di situs [wokwi.com](https://wokwi.com).
+2. Diagram menampilkan papan ESP32-C3 DevKit lengkap dengan 2 potentiometer simulator (UV di GPIO 2, Suhu di GPIO 3).
+3. Tangkap layar (*screenshot*) skema diagram ini untuk kebutuhan dokumen proposal, poster ilmiah, atau slide PPT presentasi.
 
-```bash
-cd Backend
-
-# 1. Pastikan file .env sudah ada (jika belum, copy dari .env.example)
-cp .env.example .env   # lewati jika .env sudah ada
-
-# 2. Generate Application Key (hanya jika baru pertama kali setup)
-php artisan key:generate
-
-# 3. Jalankan migrasi dan seeder database awal
-php artisan migrate --seed
-
-# 4. Jalankan development server pada host 0.0.0.0 agar dapat diakses emulator & LAN
-php artisan serve --host=0.0.0.0 --port=8000
-```
-
-- **URL API Lokal:** `http://127.0.0.1:8000`
-- **URL API Emulator Android:** `http://10.0.2.2:8000/api`
-- **Akun Uji Coba Default:**
-  - **Email:** `test@example.com`
-  - **Password:** `password`
+### Tingkat 3: Cadangan Darurat (In-App Simulation)
+Jika board fisik tertinggal atau mengalami kendala baterai saat giliran presentasi:
+1. Buka aplikasi Flutter di ponsel.
+2. Di bagian banner atas Beranda, klik tombol **"Mode"**.
+3. Pilih skenario simulasi: **Otomatis**, **Normal / Sejuk**, **Panas Ekstrem**, atau **Polusi Udara**.
+4. Aplikasi akan tetap berjalan 100% normal secara offline tanpa bergantung pada hardware eksternal.
 
 ---
 
-### 2️⃣ Terminal 2: Menjalankan IoT Simulator / Hardware
+## 4. Panduan Flash Program ke Board ESP32 Fisik
 
-Direktori: `IoT_Simulator/`
-
-#### A. Menggunakan Software Simulator Python (Tanpa Alat Fisik)
-Sangat cocok untuk demonstrasi dan testing tanpa perlu board ESP32:
-
+### Opsi A: Menggunakan PlatformIO (CLI)
+Pastikan modul ESP32 terhubung via USB, lalu jalankan:
 ```bash
-cd IoT_Simulator
+cd /home/ronaltama/PROJECT/KlimoApp/IoT_Simulator
 
-# Pastikan module requests terpasang
-pip install requests
+# 1. Kompilasi firmware
+pio run
 
-# Jalankan simulator
-python3 simulator.py
-```
-
-Anda dapat memilih mode streaming:
-- `[1]` Normal / Sejuk (UV Rendah, Suhu 27°C, VOC 65)
-- `[2]` Panas Ekstrem (UV 10.5+, Suhu 38°C, VOC 120)
-- `[3]` Polusi Udara / Gas VOC Tinggi (UV 3.0, Suhu 31°C, VOC 420)
-- `[4]` Mode Realtime Otomatis (Default / Streaming Terus dengan fluktuasi alami)
-
-> Simulator akan otomatis mengirimkan payload JSON data sensor ke `http://127.0.0.1:8000/api/telemetry` setiap 2 detik.
-
-#### B. Menggunakan Hardware Fisik (ESP32-C3 via PlatformIO)
-Jika menggunakan board fisik ESP32-C3:
-1. Sesuaikan WiFi SSID, password, dan IP backend pada `IoT_Simulator/include/config.h`.
-2. Hubungkan modul ke port USB komputer.
-3. Jalankan perintah:
-```bash
-cd IoT_Simulator
-
-# Compile dan upload firmware
+# 2. Upload firmware ke board
 pio run -t upload
 
-# Buka serial monitor untuk memantau pengiriman data
+# 3. Pantau log serial
 pio device monitor -b 115200
 ```
 
+### Opsi B: Menggunakan Arduino IDE
+1. Buka Arduino IDE.
+2. Buka berkas:
+   ```text
+   /home/ronaltama/PROJECT/KlimoApp/IoT_Simulator/Klimo_ESP32_Firmware/Klimo_ESP32_Firmware.ino
+   ```
+3. Pilih board **ESP32C3 Dev Module** (atau **ESP32 Dev Module**) pada menu **Tools > Board**.
+4. Pilih port USB yang sesuai pada **Tools > Port**.
+5. Pastikan library `ArduinoJson` sudah terinstal di Library Manager.
+6. Klik tombol **Upload**.
+
 ---
 
-### 3️⃣ Terminal 3: Menjalankan Aplikasi Mobile (Flutter)
+## 5. Menjalankan Komponen Secara Manual (Tab Terminal Terpisah)
 
-Direktori: `FlutterApps/`
-
+### Tab 1: Aplikasi Flutter
 ```bash
-cd FlutterApps
+cd /home/ronaltama/PROJECT/KlimoApp/FlutterApps
 
-# 1. Unduh paket dependensi pub
+# Unduh paket dependensi
 flutter pub get
 
-# 2. Cek perangkat yang terhubung (Emulator Android / Linux Desktop / Chrome)
-flutter devices
+# Jalankan aplikasi (Desktop Linux)
+flutter run -d linux
 
-# 3. Jalankan aplikasi ke perangkat target
-flutter run
+# Atau jalankan ke perangkat ponsel Android yang terhubung
+flutter run -d android
+```
 
-# Atau spesifik ke target device, contoh:
-# flutter run -d linux          (Desktop Linux)
-# flutter run -d chrome         (Web browser)
-# flutter run -d emulator-5554  (Android Emulator)
+### Tab 2: Backend Laravel (Opsional untuk Full-Stack Sync)
+```bash
+cd /home/ronaltama/PROJECT/KlimoApp/Backend
+
+# Jalankan server API di host 0.0.0.0
+php artisan serve --host=0.0.0.0 --port=8000
+```
+* **URL API Lokal:** `http://127.0.0.1:8000/api`
+* **Akun Demo Bawaan:** `test@example.com` / `password`
+
+### Tab 3: Python Simulator (Opsional untuk Uji Coba Injeksi Backend)
+```bash
+cd /home/ronaltama/PROJECT/KlimoApp/IoT_Simulator
+python3 simulator.py
 ```
 
 ---
 
-## 🌐 Konfigurasi Jaringan & Alamat IP (Network Routing)
+## 6. Arsitektur Alur Data (Offline-First)
 
-Aplikasi Flutter dan IoT Simulator perlu terhubung ke Backend Laravel. Perhatikan konfigurasi URL berikut:
-
-| Klien | Target URL Backend | Keterangan |
-| :--- | :--- | :--- |
-| **IoT Python Simulator** | `http://127.0.0.1:8000/api/telemetry` | Berjalan di mesin lokal yang sama |
-| **Flutter (Linux Desktop / Web)** | `http://127.0.0.1:8000/api` | Terhubung langsung ke localhost |
-| **Flutter (Android Emulator)** | `http://10.0.2.2:8000/api` | Alias default Android Emulator ke host PC |
-| **HP Fisik / Modul ESP32 WiFi** | `http://<IP_LAN_PC>:8000/api` | Contoh: `http://192.168.2.19:8000/api` (dalam 1 WiFi) |
-
-> Konfigurasi base URL Flutter terdapat di `FlutterApps/lib/services/api_service.dart`. Secara otomatis sudah mendeteksi apakah aplikasi dijalankan di Android emulator atau Desktop/Web.
-
----
-
-## ❓ Troubleshooting (Kendala Umum)
-
-1. **Port 8000 Sudah Terpakai (`Address already in use`):**
-   Cari dan matikan proses yang menggunakan port 8000:
-   ```bash
-   lsof -i :8000
-   # atau bunuh proses lama:
-   kill -9 $(lsof -t -i:8000)
-   ```
-
-2. **Database Error (Connection Refused):**
-   Pastikan service MySQL / MariaDB sedang aktif:
-   ```bash
-   sudo systemctl status mysql
-   # nyalakan jika mati:
-   sudo systemctl start mysql
-   ```
-
-3. **Python Simulator `ModuleNotFoundError: No module named 'requests'`:**
-   Install pustaka requests untuk Python:
-   ```bash
-   pip3 install requests
-   ```
+```text
+[Alat Wearable ESP32]
+        │
+        ▼ (Bluetooth BLE Notification / Live AP Bridge)
+[Ponsel Pintar - Aplikasi Flutter]
+        │
+        ├─► [Penyimpanan Lokal SQLite HP (Maks 500 Rekaman)]
+        │      (Menyaring data via Delta Threshold & Heartbeat 60 detik)
+        │
+        └─► [SyncManager Background Worker]
+               │
+               ▼ (Hanya saat koneksi internet aktif - Tiap 30 detik)
+        [Backend Laravel Cloud (POST /api/telemetry/batch)]
+               │
+               ▼
+        [Database MySQL Komunitas & Peta Sebaran]
+```
