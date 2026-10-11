@@ -212,28 +212,28 @@ class _HomeScreenState extends State<HomeScreen> {
       (
         BleSimMode.auto,
         'Otomatis (Fluktuatif Realistis)',
-        'UV 0.5–11.5 • Suhu 25–38°C • VOC 30–450',
+        'UV 1.5–7.5 • Suhu 27–34°C • VOC 45–180',
         AppTheme.primary,
         Icons.autorenew,
       ),
       (
         BleSimMode.normal,
         'Normal / Sejuk',
-        'UV 1.0–2.5 • Suhu 26–28°C • VOC 40–90',
+        'UV 1.2–2.5 • Suhu 26–28°C • VOC 40–85',
         const Color(0xFF10B981),
         Icons.wb_sunny_outlined,
       ),
       (
         BleSimMode.uvExtreme,
         'Panas Ekstrem (UV Bahaya)',
-        'UV 10.0–11.8 • Suhu 36–39°C • VOC 100–160',
+        'UV 9.8–11.6 • Suhu 36–39°C • VOC 105–155',
         const Color(0xFFEF4444),
         Icons.warning_amber_rounded,
       ),
       (
         BleSimMode.pollution,
         'Polusi Udara (VOC Tinggi)',
-        'UV 2.5–4.0 • Suhu 29–32°C • VOC 380–480',
+        'UV 2.5–3.8 • Suhu 29–32°C • VOC 395–475',
         const Color(0xFFF59E0B),
         Icons.air,
       ),
@@ -241,6 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return options.map((opt) {
       final (mode, title, desc, color, icon) = opt;
+      final isSelected = _ble.currentMode == mode;
       return Material(
         color: Colors.transparent,
         child: ListTile(
@@ -268,8 +269,12 @@ class _HomeScreenState extends State<HomeScreen> {
               color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
             ),
           ),
+          trailing: isSelected
+              ? Icon(Icons.check_circle, color: color, size: 20)
+              : null,
           onTap: () {
             _ble.changeMode(mode);
+            setState(() {});
             Navigator.pop(ctx);
           },
         ),
@@ -453,12 +458,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 4),
                 Row(
-                  children: const [
-                    Icon(Icons.battery_std_rounded, size: 14, color: AppTheme.primary),
-                    SizedBox(width: 4),
+                  children: [
+                    const Icon(Icons.battery_std_rounded, size: 14, color: AppTheme.primary),
+                    const SizedBox(width: 4),
                     Text(
-                      '68%',
-                      style: TextStyle(
+                      '${_ble.batteryPercentage}%',
+                      style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.primary,
                         fontWeight: FontWeight.bold,
@@ -491,12 +496,53 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildWaspadaCard(bool isDark) {
-    double temp = telemetryData?['temperature']?.toDouble() ?? 0.0;
-    String statusTitle = temp > 35.0 ? 'WASPADA' : (temp > 0 ? 'AMAN' : 'MENUNGGU DATA');
-    String statusDesc = temp > 35.0 ? 'Terik dan udara mulai panas. Pakai masker, cari tempat teduh.' : 'Kondisi cukup bersahabat. Tetap pantau indikator sekitar.';
-    
-    Color titleColor = temp > 35.0 ? (isDark ? Colors.white : const Color(0xFF78350F)) : (isDark ? Colors.white : const Color(0xFF065F46));
-    Color bgColor = temp > 35.0 ? (isDark ? AppTheme.darkCard : const Color(0xFFFDE68A)) : (isDark ? AppTheme.darkCard : const Color(0xFFD1FAE5));
+    final temp = telemetryData?['temperature']?.toDouble() ?? 0.0;
+    final uv = telemetryData?['uv_index']?.toDouble() ?? 0.0;
+    final voc = (telemetryData?['voc'] as num?)?.toInt() ?? 0;
+    final hasData = temp > 0 || uv > 0 || voc > 0;
+
+    final isBahaya = voc >= 250 || uv >= 8.0 || temp >= 36.0;
+    final isWaspada = !isBahaya && (voc >= 120 || uv >= 6.0 || temp >= 33.0);
+
+    String statusTitle = 'MENUNGGU DATA';
+    String statusDesc = 'Mencari sinyal sensor Klimo...';
+    Color titleColor = isDark ? Colors.white : AppTheme.textLight;
+    Color bgColor = isDark ? AppTheme.darkCard : const Color(0xFFF1F5F9);
+    IconData bgIcon = Icons.sensors;
+
+    if (hasData) {
+      if (isBahaya) {
+        statusTitle = 'BAHAYA';
+        if (voc >= 250) {
+          statusDesc = 'Konsentrasi gas VOC tinggi ($voc). Hindari polusi, gunakan masker respirator.';
+        } else if (uv >= 8.0) {
+          statusDesc = 'Radiasi UV sangat ekstrem (${uv.toStringAsFixed(1)}). Wajib tabir surya SPF 50+ & cari tempat teduh.';
+        } else {
+          statusDesc = 'Suhu panas ekstrem (${temp.toStringAsFixed(1)}°C). Waspada dehidrasi akut dan sengatan panas.';
+        }
+        titleColor = isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B);
+        bgColor = isDark ? const Color(0xFF241416) : const Color(0xFFFEE2E2);
+        bgIcon = Icons.warning_amber_rounded;
+      } else if (isWaspada) {
+        statusTitle = 'WASPADA';
+        if (voc >= 120) {
+          statusDesc = 'Polusi udara meningkat (VOC $voc). Batasi aktivitas fisik berat di luar.';
+        } else if (uv >= 6.0) {
+          statusDesc = 'Indeks radiasi UV tinggi (${uv.toStringAsFixed(1)}). Disarankan berteduh dan gunakan pelindung surya.';
+        } else {
+          statusDesc = 'Udara cukup terik (${temp.toStringAsFixed(1)}°C). Jaga asupan hidrasi secara berkala.';
+        }
+        titleColor = isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E);
+        bgColor = isDark ? const Color(0xFF221C11) : const Color(0xFFFEF3C7);
+        bgIcon = Icons.wb_sunny_outlined;
+      } else {
+        statusTitle = 'AMAN';
+        statusDesc = 'Kondisi cukup bersahabat. Semua parameter sensor dalam batas aman.';
+        titleColor = isDark ? const Color(0xFF6EE7B7) : const Color(0xFF065F46);
+        bgColor = isDark ? AppTheme.darkCard : const Color(0xFFD1FAE5);
+        bgIcon = Icons.check_circle_outline;
+      }
+    }
 
     return Container(
       width: double.infinity,
@@ -515,11 +561,15 @@ class _HomeScreenState extends State<HomeScreen> {
             top: -15,
             right: -15,
             child: Icon(
-              Icons.wb_sunny_outlined,
+              bgIcon,
               size: 110,
               color: isDark
                   ? const Color(0xFF1E2D40).withValues(alpha: 0.6)
-                  : (temp > 35.0 ? Colors.orange.withValues(alpha: 0.15) : Colors.green.withValues(alpha: 0.15)),
+                  : (isBahaya
+                      ? Colors.red.withValues(alpha: 0.15)
+                      : (isWaspada
+                          ? Colors.orange.withValues(alpha: 0.15)
+                          : Colors.green.withValues(alpha: 0.15))),
             ),
           ),
           Column(
@@ -531,7 +581,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
-                  color: isDark ? AppTheme.darkTextSecondary : (temp > 35.0 ? const Color(0xFF92400E) : const Color(0xFF065F46)),
+                  color: isDark
+                      ? AppTheme.darkTextSecondary
+                      : (isBahaya
+                          ? const Color(0xFF991B1B)
+                          : (isWaspada ? const Color(0xFF92400E) : const Color(0xFF065F46))),
                 ),
               ),
               const SizedBox(height: 4),
@@ -550,7 +604,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.4,
-                  color: isDark ? AppTheme.darkTextSecondary : (temp > 35.0 ? const Color(0xFF92400E) : const Color(0xFF065F46)),
+                  color: isDark
+                      ? AppTheme.darkTextSecondary
+                      : (isBahaya
+                          ? const Color(0xFF991B1B)
+                          : (isWaspada ? const Color(0xFF92400E) : const Color(0xFF065F46))),
                 ),
               ),
               const SizedBox(height: 16),
@@ -621,12 +679,14 @@ class _HomeScreenState extends State<HomeScreen> {
       subtitle: uv > 7 ? 'Sangat tinggi' : (uv > 3 ? 'Sedang' : 'Rendah'),
       progressValue: (uv / 11.0).clamp(0.0, 1.0),
       progressColor: uv > 7 ? const Color(0xFFF59E0B) : AppTheme.primary,
-      bottomText: 'Data Live API',
+      bottomText: _bleStatus == BleConnectionStatus.connected
+          ? 'Sensor Live ESP32'
+          : 'Simulasi BLE (${_ble.modeName})',
       isDark: isDark,
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const UVDetailScreen()),
+          MaterialPageRoute(builder: (context) => UVDetailScreen(currentUv: uv)),
         );
       },
     );
@@ -644,7 +704,9 @@ class _HomeScreenState extends State<HomeScreen> {
       subtitle: 'Indeks $voc',
       progressValue: (voc / 500.0).clamp(0.0, 1.0),
       progressColor: voc > 200 ? const Color(0xFFEF4444) : AppTheme.primary,
-      bottomText: 'Data Live API',
+      bottomText: _bleStatus == BleConnectionStatus.connected
+          ? 'Sensor Live ESP32'
+          : 'Simulasi BLE (${_ble.modeName})',
       isDark: isDark,
     );
   }
@@ -727,21 +789,62 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildWarningBanner(bool isDark) {
+    final voc = (telemetryData?['voc'] as num?)?.toInt() ?? 0;
+    final uv = telemetryData?['uv_index']?.toDouble() ?? 0.0;
+    final temp = telemetryData?['temperature']?.toDouble() ?? 0.0;
+
+    IconData bannerIcon;
+    Color iconColor;
+    Color borderClr;
+    Color bgClr;
+    String boldText;
+    String detailText;
+
+    if (voc >= 200) {
+      bannerIcon = Icons.air;
+      iconColor = const Color(0xFFEF4444);
+      borderClr = const Color(0xFFF87171);
+      bgClr = isDark ? const Color(0xFF261214) : const Color(0xFFFEF2F2);
+      boldText = 'Polusi gas naik (VOC $voc)— ';
+      detailText = 'Disarankan pakai masker atau pindah ke area ventilasi baik.';
+    } else if (uv >= 8.0) {
+      bannerIcon = Icons.wb_sunny_rounded;
+      iconColor = const Color(0xFFF59E0B);
+      borderClr = const Color(0xFFFBBF24);
+      bgClr = isDark ? const Color(0xFF261D12) : const Color(0xFFFFFBEB);
+      boldText = 'Radiasi UV ekstrem (${uv.toStringAsFixed(1)})— ';
+      detailText = 'Disarankan berteduh dan aplikasikan ulang tabir surya SPF 50+.';
+    } else if (temp >= 35.0) {
+      bannerIcon = Icons.thermostat;
+      iconColor = const Color(0xFFF97316);
+      borderClr = const Color(0xFFFB923C);
+      bgClr = isDark ? const Color(0xFF261812) : const Color(0xFFFFF7ED);
+      boldText = 'Suhu udara panas (${temp.toStringAsFixed(1)}°C)— ';
+      detailText = 'Waspada dehidrasi, minum air putih dan istirahat di tempat sejuk.';
+    } else {
+      bannerIcon = Icons.verified_user_outlined;
+      iconColor = AppTheme.primary;
+      borderClr = AppTheme.primary.withValues(alpha: 0.3);
+      bgClr = isDark ? AppTheme.darkCard : const Color(0xFFF0FDF4);
+      boldText = 'Kualitas lingkungan baik— ';
+      detailText = 'Indikator sensor menunjukkan kondisi aman untuk aktivitas luar.';
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : const Color(0xFFFFFBEB),
+        color: bgClr,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFFDE68A),
+          color: isDark ? AppTheme.darkCardBorder : borderClr,
         ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
-            Icons.warning_amber_rounded,
-            color: isDark ? AppTheme.primary : const Color(0xFFD97706),
+            bannerIcon,
+            color: iconColor,
             size: 22,
           ),
           const SizedBox(width: 12),
@@ -749,19 +852,19 @@ class _HomeScreenState extends State<HomeScreen> {
             child: RichText(
               text: TextSpan(
                 style: TextStyle(
-                  color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF92400E),
+                  color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF1E293B),
                   fontSize: 13,
                   height: 1.4,
                 ),
                 children: [
                   TextSpan(
-                    text: 'Polusi gas naik— ',
+                    text: boldText,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : const Color(0xFF92400E),
+                      color: isDark ? Colors.white : iconColor,
                     ),
                   ),
-                  const TextSpan(text: 'Disarankan pakai masker atau pindah sebentar.'),
+                  TextSpan(text: detailText),
                 ],
               ),
             ),
@@ -772,26 +875,52 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSunscreenCard(bool isDark) {
+    final uv = telemetryData?['uv_index']?.toDouble() ?? 0.0;
+    String val = uv >= 8.0 ? 'SPF 50+' : (uv >= 3.0 ? 'SPF 30+' : 'Aman');
+    String sub = uv >= 8.0 ? 'Wajib proteksi maksimal' : (uv >= 3.0 ? 'Oles sebelum keluar' : 'UV rendah');
+
     return _buildActionCard(
       icon: Icons.wb_sunny_outlined,
       title: 'Sunscreen',
-      value: '42:10',
-      subtitle: 'lagi',
+      value: val,
+      subtitle: sub,
       buttonText: 'Sudah oles',
       isOutlined: false,
       isDark: isDark,
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Proteksi tabir surya dicatat. Perlindungan aktif!'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      },
     );
   }
 
   Widget _buildMinumCard(bool isDark) {
+    final temp = telemetryData?['temperature']?.toDouble() ?? 0.0;
+    String val = temp >= 35.0 ? '15 mnt' : (temp >= 30.0 ? '30 mnt' : '60 mnt');
+    String sub = temp >= 35.0 ? 'Lagi (suhu terik)' : (temp >= 30.0 ? 'Lagi (suhu hangat)' : 'Lagi (suhu normal)');
+
     return _buildActionCard(
       icon: Icons.local_drink_outlined,
       title: 'Minum',
-      value: '15 mnt',
-      subtitle: 'lagi',
+      value: val,
+      subtitle: sub,
       buttonText: 'Sudah minum',
       isOutlined: true,
       isDark: isDark,
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Asupan air tercatat. Kebutuhan hidrasi terjaga!'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      },
     );
   }
 
@@ -803,6 +932,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required String buttonText,
     required bool isOutlined,
     required bool isDark,
+    VoidCallback? onTap,
   }) {
     return Container(
       padding: const EdgeInsets.all(18),
@@ -853,7 +983,7 @@ class _HomeScreenState extends State<HomeScreen> {
             width: double.infinity,
             child: isOutlined
                 ? OutlinedButton(
-                    onPressed: () {},
+                    onPressed: onTap,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.primary,
                       backgroundColor: isDark ? AppTheme.darkCard : Colors.transparent,
@@ -867,7 +997,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   )
                 : ElevatedButton(
-                    onPressed: () {},
+                    onPressed: onTap,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primary,
                       foregroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,

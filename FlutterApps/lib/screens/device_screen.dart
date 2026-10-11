@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/ble_simulator_service.dart';
@@ -14,10 +16,11 @@ class DeviceScreen extends StatefulWidget {
 }
 
 class _DeviceScreenState extends State<DeviceScreen> {
-  bool _powerSaving = true;
+  bool _powerSaving = false;
   List<dynamic> _devices = [];
   String _savedDeviceName = 'Klimo Wearth C3-4A1B';
   bool _isLoading = true;
+  double _tempOffset = 0.0;
 
   final _ble = BleSimulatorService();
   final _sync = SyncManager();
@@ -28,14 +31,41 @@ class _DeviceScreenState extends State<DeviceScreen> {
   @override
   void initState() {
     super.initState();
+    _bleStatus = _ble.status;
+    _powerSaving = _ble.intervalSeconds >= 10;
+    _loadTempOffset();
     _fetchDeviceData();
+
     // Subscribe ke status BLE
     _ble.statusStream.listen((s) {
       if (mounted) setState(() => _bleStatus = s);
     });
+    // Subscribe ke data record agar nilai sensor live di halaman alat reaktif
+    _ble.recordStream.listen((_) {
+      if (mounted) setState(() {});
+    });
     _sync.pendingCountStream.listen((c) {
       if (mounted) setState(() => _pendingSync = c);
     });
+  }
+
+  Future<void> _loadTempOffset() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _tempOffset = prefs.getDouble('temp_offset') ?? 0.0;
+      });
+    }
+  }
+
+  Future<void> _saveTempOffset(double offset) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('temp_offset', offset);
+    if (mounted) {
+      setState(() {
+        _tempOffset = offset;
+      });
+    }
   }
 
   Future<void> _fetchDeviceData() async {
@@ -107,15 +137,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                         Icons.thermostat_outlined,
                         'Kalibrasi suhu',
                         isDark,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Kalibrasi offset sensor SHT40 berhasil disimpan (-0.2°C).'),
-                              backgroundColor: AppTheme.primary,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        },
+                        onTap: () => _showCalibrationDialog(context, isDark),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -125,13 +147,23 @@ class _DeviceScreenState extends State<DeviceScreen> {
                         'Tes getar',
                         isDark,
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Sinyal haptic getar dikirim ke Klimo Wearth via Bluetooth!'),
-                              backgroundColor: AppTheme.primary,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
+                          HapticFeedback.heavyImpact();
+                          if (_ble.isActive) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Sinyal getar haptic terkirim ke $_savedDeviceName via BLE!'),
+                                backgroundColor: AppTheme.primary,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Alat tidak terhubung. Menguji getaran haptic motor ponsel.'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
                         },
                       ),
                     ),
@@ -186,7 +218,12 @@ class _DeviceScreenState extends State<DeviceScreen> {
           ],
         ),
         InkWell(
-          onTap: _isLoading ? null : _fetchDeviceData,
+          onTap: _isLoading
+              ? null
+              : () async {
+                  await SyncManager().syncNow();
+                  await _fetchDeviceData();
+                },
           borderRadius: BorderRadius.circular(20),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -243,6 +280,41 @@ class _DeviceScreenState extends State<DeviceScreen> {
       deviceDisplayName = _devices.first['name'];
     }
 
+    Color statusBg;
+    Color statusColor;
+    String statusText;
+    IconData statusIcon;
+
+    switch (_bleStatus) {
+      case BleConnectionStatus.connected:
+        statusBg = isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5);
+        statusColor = AppTheme.primary;
+        statusText = 'BLE Terhubung';
+        statusIcon = Icons.bluetooth_connected;
+        break;
+      case BleConnectionStatus.simulating:
+        statusBg = isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5);
+        statusColor = AppTheme.primary;
+        statusText = 'Simulator Aktif';
+        statusIcon = Icons.check_circle;
+        break;
+      case BleConnectionStatus.scanning:
+        statusBg = isDark ? const Color(0xFF332313) : const Color(0xFFFEF3C7);
+        statusColor = const Color(0xFFF59E0B);
+        statusText = 'Memindai...';
+        statusIcon = Icons.bluetooth_searching;
+        break;
+      case BleConnectionStatus.disconnected:
+        statusBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+        statusColor = isDark ? AppTheme.darkTextSecondary : AppTheme.textLight;
+        statusText = 'Terputus';
+        statusIcon = Icons.bluetooth_disabled;
+        break;
+    }
+
+    final int batteryLevel = _ble.isActive ? _ble.batteryPercentage : 0;
+    final int hoursRemaining = (batteryLevel * 0.16).round();
+
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -282,29 +354,45 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: AppTheme.primary.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.circle, color: AppTheme.primary, size: 7),
-                    SizedBox(width: 6),
-                    Text(
-                      'Terhubung',
-                      style: TextStyle(
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
+              InkWell(
+                onTap: () {
+                  if (_ble.isActive) {
+                    _ble.stop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Koneksi perangkat BLE diputuskan.')),
+                    );
+                  } else {
+                    _ble.startSimulation();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Menghubungkan ke Klimo Wearable...')),
+                    );
+                  }
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.3),
                     ),
-                  ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, color: statusColor, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -312,10 +400,14 @@ class _DeviceScreenState extends State<DeviceScreen> {
           const SizedBox(height: 18),
           Row(
             children: [
-              const Icon(Icons.battery_std_rounded, color: AppTheme.primary, size: 16),
+              Icon(
+                batteryLevel > 20 ? Icons.battery_std_rounded : Icons.battery_alert_rounded,
+                color: batteryLevel > 20 ? AppTheme.primary : const Color(0xFFEF4444),
+                size: 16,
+              ),
               const SizedBox(width: 8),
               Text(
-                'Baterai 85%',
+                _ble.isActive ? 'Baterai $batteryLevel%' : 'Baterai: Tidak Terdeteksi',
                 style: TextStyle(
                   color: isDark ? Colors.white : AppTheme.textDark,
                   fontSize: 14,
@@ -324,7 +416,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
               ),
               const SizedBox(width: 8),
               Text(
-                '· Sisa ~14 jam',
+                _ble.isActive ? '· Sisa ~$hoursRemaining jam' : '· Sambungkan alat',
                 style: TextStyle(
                   color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
                   fontSize: 12,
@@ -336,9 +428,11 @@ class _DeviceScreenState extends State<DeviceScreen> {
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: 0.85,
+              value: _ble.isActive ? (batteryLevel / 100.0) : 0.0,
               backgroundColor: isDark ? const Color(0xFF101B2B) : AppTheme.greyLight,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                batteryLevel > 20 ? AppTheme.primary : const Color(0xFFEF4444),
+              ),
               minHeight: 7,
             ),
           ),
@@ -382,10 +476,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   Widget _buildHardwareSpecsCard(bool isDark) {
-    String macAddress = '00:1B:44:11:3A:B7';
-    if (_devices.isNotEmpty && _devices.first['mac_address'] != null) {
-      macAddress = _devices.first['mac_address'];
-    }
+    String macAddress = _devices.isNotEmpty && _devices.first['mac_address'] != null
+        ? _devices.first['mac_address']
+        : (_ble.isActive ? '00:1B:44:11:3A:B7' : '-');
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -415,9 +508,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
           ),
           const SizedBox(height: 14),
           _buildSpecRow('MAC Address', macAddress, isDark),
-          _buildSpecRow('Versi Firmware', 'v1.2.0 (PlatformIO / Arduino)', isDark),
-          _buildSpecRow('Konektivitas', 'BLE 5.0 & WiFi 2.4GHz', isDark),
-          _buildSpecRow('Prosesor', 'Espressif ESP32-C3 RISC-V 160MHz', isDark),
+          _buildSpecRow('Versi Firmware', 'v1.2.0 (PlatformIO / ESP-IDF)', isDark),
+          _buildSpecRow('Konektivitas', 'BLE 5.0 GATT & WiFi 2.4GHz', isDark),
+          _buildSpecRow('Mikrokontroler', 'Espressif ESP32-C3 RISC-V 160MHz', isDark),
         ],
       ),
     );
@@ -450,6 +543,17 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   Widget _buildSensorStatusCard(bool isDark) {
+    final record = _ble.lastRecord;
+    final isOnline = _ble.isActive && record != null;
+
+    final uvText = isOnline ? 'Aktif (${record.uvIndex.toStringAsFixed(1)} UVI)' : 'Offline';
+    final tempText = isOnline
+        ? 'Aktif (${(record.temperature + _tempOffset).toStringAsFixed(1)}°C / ${record.humidity.toStringAsFixed(0)}%)'
+        : 'Offline';
+    final vocText = isOnline ? 'Aktif (${record.voc} ppm)' : 'Offline';
+    final lightText = isOnline ? 'Terkalibrasi (Ambient Lux)' : 'Offline';
+    final imuText = isOnline ? 'Siaga (6-Axis IMU)' : 'Offline';
+
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -462,28 +566,52 @@ class _DeviceScreenState extends State<DeviceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Status Sensor Fisik',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: isDark ? Colors.white : AppTheme.textDark,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Status Sensor Fisik',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isOnline
+                      ? AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.12)
+                      : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  isOnline ? 'Real-Time Live' : 'Sensor Mati',
+                  style: TextStyle(
+                    color: isOnline ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
-          _buildSensorRow(Icons.wb_sunny_outlined, 'Sensor UV (LTR-390 / Analog)', isDark),
-          _buildSensorRow(Icons.lightbulb_outline, 'Sensor Cahaya (Ambient Lux)', isDark),
-          _buildSensorRow(Icons.thermostat_outlined, 'Suhu & Kelembapan (SHT40 I2C)', isDark),
-          _buildSensorRow(Icons.air, 'Gas VOC & Udara (SGP41)', isDark),
-          _buildSensorRow(Icons.timeline, 'Accelerometer (Gerak Pengguna)', isDark),
+          _buildSensorRow(Icons.wb_sunny_outlined, 'Sensor UV (LTR-390 / Analog)', uvText, isOnline, isDark),
+          _buildSensorRow(Icons.thermostat_outlined, 'Suhu & Kelembapan (SHT40)', tempText, isOnline, isDark),
+          _buildSensorRow(Icons.air, 'Gas VOC & Udara (SGP41)', vocText, isOnline, isDark),
+          _buildSensorRow(Icons.lightbulb_outline, 'Sensor Cahaya (Lux)', lightText, isOnline, isDark),
+          _buildSensorRow(Icons.timeline, 'Accelerometer (Gerak Pengguna)', imuText, isOnline, isDark),
         ],
       ),
     );
   }
 
-  Widget _buildSensorRow(IconData icon, String name, bool isDark) {
+  Widget _buildSensorRow(IconData icon, String name, String statusText, bool isOnline, bool isDark) {
+    final statusColor = isOnline ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -491,28 +619,28 @@ class _DeviceScreenState extends State<DeviceScreen> {
             children: [
               Icon(
                 icon,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                size: 20,
+                color: isOnline ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                size: 18,
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Text(
                 name,
                 style: TextStyle(
                   color: isDark ? Colors.white : AppTheme.textDark,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ],
           ),
           Row(
-            children: const [
-              Icon(Icons.circle, color: AppTheme.primary, size: 7),
-              SizedBox(width: 6),
+            children: [
+              Icon(Icons.circle, color: statusColor, size: 7),
+              const SizedBox(width: 6),
               Text(
-                'Normal',
+                statusText,
                 style: TextStyle(
-                  color: AppTheme.primary,
+                  color: statusColor,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
@@ -526,7 +654,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   Widget _buildPowerSavingCard(bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : AppTheme.card,
         borderRadius: BorderRadius.circular(24),
@@ -550,7 +678,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Interval pengiriman: 10 detik',
+                'Interval pengiriman: ${_powerSaving ? "10 detik" : "3 detik"}',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
@@ -564,12 +692,13 @@ class _DeviceScreenState extends State<DeviceScreen> {
               setState(() {
                 _powerSaving = val;
               });
+              _ble.setInterval(val ? 10 : 3);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
                     val
-                        ? 'Mode hemat daya aktif. Interval transmisi 10 detik.'
-                        : 'Mode performa tinggi aktif. Interval transmisi 2 detik.',
+                        ? 'Mode hemat daya aktif. Interval transmisi sensor diubah ke 10 detik.'
+                        : 'Mode responsif aktif. Interval transmisi sensor diubah ke 3 detik.',
                   ),
                   duration: const Duration(milliseconds: 1500),
                 ),
@@ -662,6 +791,171 @@ class _DeviceScreenState extends State<DeviceScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showCalibrationDialog(BuildContext context, bool isDark) {
+    double selectedOffset = _tempOffset;
+    final currentRaw = _ble.lastRecord?.temperature ?? 27.5;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppTheme.darkCard : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final adjusted = currentRaw + selectedOffset;
+          return Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Kalibrasi Suhu SHT40',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : AppTheme.textDark,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Sesuaikan offset kalibrasi untuk mengkompensasi suhu tubuh saat perangkat dipakai di pergelangan tangan.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Suhu Sensor',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${currentRaw.toStringAsFixed(1)}°C',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : AppTheme.textDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Icon(Icons.arrow_forward, color: AppTheme.primary, size: 20),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Setelah Kalibrasi',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${adjusted.toStringAsFixed(1)}°C',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Pilih Nilai Offset Kalibrasi:',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [-1.0, -0.5, -0.2, 0.0, 0.2, 0.5].map((offset) {
+                    final isSelected = (selectedOffset - offset).abs() < 0.01;
+                    return ChoiceChip(
+                      label: Text(
+                        offset == 0.0 ? '0.0°C (Default)' : '${offset > 0 ? "+" : ""}${offset.toStringAsFixed(1)}°C',
+                      ),
+                      selected: isSelected,
+                      selectedColor: AppTheme.primary.withValues(alpha: 0.2),
+                      labelStyle: TextStyle(
+                        color: isSelected ? AppTheme.primary : (isDark ? Colors.white70 : AppTheme.textDark),
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontSize: 12,
+                      ),
+                      onSelected: (val) {
+                        if (val) {
+                          setSheetState(() => selectedOffset = offset);
+                        }
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      _saveTempOffset(selectedOffset);
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Offset kalibrasi suhu berhasil disimpan (${selectedOffset >= 0 ? "+" : ""}${selectedOffset.toStringAsFixed(1)}°C).',
+                          ),
+                          backgroundColor: AppTheme.primary,
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: const Text('Terapkan Kalibrasi', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/local_data_service.dart';
+import '../services/ble_simulator_service.dart';
 import 'setup/skin_type_screen.dart';
 import 'setup/device_pairing_screen.dart';
 
@@ -17,10 +19,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _deviceName = 'Klimo Wearth C3-4A1B';
   bool _isLoading = true;
 
+  int _activeDays = 1;
+  int _protectionScore = 100;
+  int _alertCount = 0;
+  final _ble = BleSimulatorService();
+
   @override
   void initState() {
     super.initState();
     _fetchProfile();
+    _ble.statusStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+    _ble.recordStream.listen((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _fetchProfile() async {
@@ -32,12 +45,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final skinType = await ApiService.getSkinType();
     final deviceName = await ApiService.getConnectedDevice();
 
+    // Hitung metrik dinamis dari telemetri aktual (Lokal SQLite & API)
+    final localHistory = await LocalDataService.getHistory(limit: 500);
+    List<dynamic> telemetryRecords = [];
+
+    if (localHistory.isNotEmpty) {
+      telemetryRecords = localHistory.map((r) => {
+        'uv_index': r.uvIndex,
+        'temperature': r.temperature,
+        'humidity': r.humidity,
+        'voc': r.voc,
+        'created_at': r.timestamp.toIso8601String(),
+      }).toList();
+    } else {
+      telemetryRecords = await ApiService.getHistoryData();
+    }
+
+    int activeDays = 1;
+    int protectionScore = 100;
+    int alerts = 0;
+
+    if (telemetryRecords.isNotEmpty) {
+      final daysSet = <String>{};
+      int safeCount = 0;
+
+      for (var item in telemetryRecords) {
+        final uv = (item['uv_index'] as num?)?.toDouble() ?? 0.0;
+        final temp = (item['temperature'] as num?)?.toDouble() ?? 0.0;
+        final voc = (item['voc'] as num?)?.toInt() ?? 0;
+
+        if (item['created_at'] != null) {
+          final dt = DateTime.tryParse(item['created_at'].toString())?.toLocal();
+          if (dt != null) {
+            daysSet.add('${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}');
+          }
+        }
+
+        if (uv < 6.0 && temp < 33.0) {
+          safeCount++;
+        }
+
+        if (uv >= 8.0 || temp >= 35.0 || voc >= 250) {
+          alerts++;
+        }
+      }
+
+      if (daysSet.isNotEmpty) {
+        activeDays = daysSet.length;
+      }
+      protectionScore = ((safeCount / telemetryRecords.length) * 100).round();
+    } else if (data?['created_at'] != null) {
+      final userCreated = DateTime.tryParse(data!['created_at'].toString())?.toLocal();
+      if (userCreated != null) {
+        final diff = DateTime.now().difference(userCreated).inDays + 1;
+        if (diff > 0) activeDays = diff;
+      }
+    }
+
     if (!mounted) return;
 
     setState(() {
       _userProfile = data;
       _skinType = skinType;
       _deviceName = deviceName;
+      _activeDays = activeDays;
+      _protectionScore = protectionScore;
+      _alertCount = alerts;
       _isLoading = false;
     });
   }
@@ -218,7 +291,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     Expanded(
                       child: _buildStatCard(
-                        '127',
+                        '$_activeDays',
                         'Hari Aktif',
                         isDark ? Colors.white : AppTheme.textDark,
                         isDark,
@@ -227,7 +300,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: _buildStatCard(
-                        '89%',
+                        '$_protectionScore%',
                         'Skor Proteksi',
                         AppTheme.primary,
                         isDark,
@@ -236,9 +309,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: _buildStatCard(
-                        '14',
+                        '$_alertCount',
                         'Peringatan',
-                        isDark ? Colors.white : AppTheme.textDark,
+                        _alertCount > 0
+                            ? (isDark ? const Color(0xFFF59E0B) : const Color(0xFFD97706))
+                            : (isDark ? Colors.white : AppTheme.textDark),
                         isDark,
                       ),
                     ),
@@ -351,8 +426,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileCard(bool isDark) {
-    String name = _userProfile?['name'] ?? 'Test User';
-    String email = _userProfile?['email'] ?? 'test@example.com';
+    String name = _userProfile?['name'] ?? 'Pengguna Klimo';
+    String email = _userProfile?['email'] ?? 'pengguna@klimo.app';
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -471,6 +546,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildSkinTypeCard(bool isDark) {
+    const skinMeta = {
+      'Tipe I': {'desc': 'Sangat terang · selalu terbakar', 'color': Color(0xFFF1D4B3)},
+      'Tipe II': {'desc': 'Terang · mudah terbakar', 'color': Color(0xFFDFAB87)},
+      'Tipe III': {'desc': 'Sedang · kadang terbakar', 'color': Color(0xFFC78B60)},
+      'Tipe IV': {'desc': 'Sawo matang · jarang terbakar', 'color': Color(0xFFA56637)},
+      'Tipe V': {'desc': 'Cokelat · sangat jarang terbakar', 'color': Color(0xFF703D1A)},
+      'Tipe VI': {'desc': 'Gelap · hampir tidak terbakar', 'color': Color(0xFF3B1E0D)},
+    };
+
+    final meta = skinMeta[_skinType] ?? skinMeta['Tipe IV']!;
+    final Color skinColor = meta['color'] as Color;
+    final String skinDesc = meta['desc'] as String;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -485,10 +573,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFA56637).withValues(alpha: 0.15),
+              color: skinColor.withValues(alpha: 0.25),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.wb_sunny_outlined, color: Color(0xFFA56637), size: 22),
+            child: Icon(Icons.wb_sunny_outlined, color: skinColor, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -505,7 +593,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Perhitungan ambang batas UV aktif',
+                  skinDesc,
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
@@ -528,6 +616,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildMyDeviceCard(bool isDark) {
+    final bool isBleActive = _ble.isActive;
+    final int battery = isBleActive ? _ble.batteryPercentage : 0;
+    final String statusText = isBleActive
+        ? (_ble.status == BleConnectionStatus.connected ? '· BLE Terhubung' : '· Simulator BLE')
+        : '· Tidak Tersambung';
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -563,19 +657,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    const Icon(Icons.battery_std_rounded, color: AppTheme.primary, size: 14),
-                    const SizedBox(width: 4),
-                    const Text(
-                      '85%',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Icon(
+                      isBleActive
+                          ? (battery > 20 ? Icons.battery_std_rounded : Icons.battery_alert_rounded)
+                          : Icons.bluetooth_disabled,
+                      color: isBleActive ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                      size: 14,
                     ),
-                    const SizedBox(width: 8),
+                    if (isBleActive) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        '$battery%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: battery > 20 ? AppTheme.primary : const Color(0xFFEF4444),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(width: 6),
                     Text(
-                      '· Aktif via BLE',
+                      statusText,
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,

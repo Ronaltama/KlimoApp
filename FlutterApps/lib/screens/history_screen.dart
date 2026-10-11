@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../services/local_data_service.dart';
 import '../services/api_service.dart';
 import '../services/ble_simulator_service.dart';
+import '../services/sync_manager.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -17,13 +18,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
   bool _isLoading = true;
   bool _isFromLocal = false; // indikator sumber data
 
-  double _peakUv = 8.5;
-  double _avgTemp = 31.2;
-  int _avgVoc = 120;
+  double _peakUv = 0.0;
+  double _avgTemp = 0.0;
+  double _avgHum = 0.0;
+  int _avgVoc = 0;
+  int _safeUvPercent = 0;
+  int _comfortTempPercent = 0;
+
+  List<(String label, double val, bool isActive)> _weeklyBars = [];
+  List<(String label, double val, bool isActive)> _dailyBars = [];
 
   @override
   void initState() {
     super.initState();
+    _calculateMetrics();
     _fetchHistoryData();
     // Subscribe ke stream BLE untuk auto-refresh riwayat saat data baru masuk
     BleSimulatorService().recordStream.listen((_) {
@@ -68,31 +76,100 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _calculateMetrics() {
-    if (_historyData.isEmpty) return;
+    const dayLabels = {1: 'Sen', 2: 'Sel', 3: 'Rab', 4: 'Kam', 5: 'Jum', 6: 'Sab', 7: 'Min'};
+    final dailySlots = [8, 10, 12, 14, 16, 18];
+    final currentWeekday = DateTime.now().weekday;
+
+    if (_historyData.isEmpty) {
+      _peakUv = 0.0;
+      _avgTemp = 0.0;
+      _avgHum = 0.0;
+      _avgVoc = 0;
+      _safeUvPercent = 0;
+      _comfortTempPercent = 0;
+      _weeklyBars = List.generate(7, (i) {
+        final dayIndex = i + 1;
+        return (dayLabels[dayIndex]!, 0.0, dayIndex == currentWeekday);
+      });
+      _dailyBars = dailySlots.map((slot) => ('${slot.toString().padLeft(2, '0')}:00', 0.0, false)).toList();
+      return;
+    }
 
     double maxUv = 0.0;
     double sumTemp = 0.0;
+    double sumHum = 0.0;
     int sumVoc = 0;
     int count = 0;
+    int safeUvCount = 0;
+    int comfortTempCount = 0;
+
+    final weeklyMaxUv = <int, double>{1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0, 7: 0.0};
+    final dailyMaxUv = <int, double>{8: 0.0, 10: 0.0, 12: 0.0, 14: 0.0, 16: 0.0, 18: 0.0};
 
     for (var item in _historyData) {
-      if (item['uv_index'] != null) {
-        double uv = (item['uv_index'] as num).toDouble();
-        if (uv > maxUv) maxUv = uv;
-      }
-      if (item['temperature'] != null) {
-        sumTemp += (item['temperature'] as num).toDouble();
-      }
-      if (item['voc'] != null) {
-        sumVoc += (item['voc'] as num).toInt();
-      }
+      final uv = (item['uv_index'] as num?)?.toDouble() ?? 0.0;
+      final temp = (item['temperature'] as num?)?.toDouble() ?? 0.0;
+      final hum = (item['humidity'] as num?)?.toDouble() ?? 0.0;
+      final voc = (item['voc'] as num?)?.toInt() ?? 0;
+
+      if (uv > maxUv) maxUv = uv;
+      if (uv < 3.0) safeUvCount++;
+      if (temp < 32.0) comfortTempCount++;
+
+      sumTemp += temp;
+      sumHum += hum;
+      sumVoc += voc;
       count++;
+
+      DateTime? dt;
+      if (item['created_at'] != null) {
+        dt = DateTime.tryParse(item['created_at'].toString())?.toLocal();
+      }
+
+      if (dt != null) {
+        final w = dt.weekday; // 1 = Senin ... 7 = Minggu
+        if (weeklyMaxUv.containsKey(w)) {
+          if (uv > weeklyMaxUv[w]!) weeklyMaxUv[w] = uv;
+        }
+
+        final hour = dt.hour;
+        int matchedSlot = 8;
+        int minDiff = 999;
+        for (var s in dailySlots) {
+          final diff = (hour - s).abs();
+          if (diff < minDiff) {
+            minDiff = diff;
+            matchedSlot = s;
+          }
+        }
+        if (uv > dailyMaxUv[matchedSlot]!) {
+          dailyMaxUv[matchedSlot] = uv;
+        }
+      }
     }
 
     if (count > 0) {
-      _peakUv = maxUv > 0 ? maxUv : 6.5;
+      _peakUv = maxUv;
       _avgTemp = sumTemp / count;
+      _avgHum = sumHum / count;
       _avgVoc = (sumVoc / count).round();
+      _safeUvPercent = ((safeUvCount / count) * 100).round();
+      _comfortTempPercent = ((comfortTempCount / count) * 100).round();
+    }
+
+    _weeklyBars = [];
+    for (int i = 1; i <= 7; i++) {
+      final val = weeklyMaxUv[i] ?? 0.0;
+      final isPeak = maxUv > 0 && val == maxUv;
+      final isToday = i == currentWeekday;
+      _weeklyBars.add((dayLabels[i]!, val, isPeak || (val > 0 && isToday)));
+    }
+
+    _dailyBars = [];
+    for (var slot in dailySlots) {
+      final val = dailyMaxUv[slot] ?? 0.0;
+      final isPeak = maxUv > 0 && val == maxUv;
+      _dailyBars.add(('${slot.toString().padLeft(2, '0')}:00', val, isPeak));
     }
   }
 
@@ -160,19 +237,38 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     color: isDark ? Colors.white : AppTheme.textDark,
                   ),
                 ),
-                Text(
-                  'Analitik paparan mikroiklim',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _isFromLocal ? const Color(0xFF10B981) : const Color(0xFF3B82F6),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _isFromLocal ? 'SQLite Lokal HP (Offline)' : 'Database API Server',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _isFromLocal ? const Color(0xFF10B981) : const Color(0xFF3B82F6),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ],
         ),
         InkWell(
-          onTap: _isLoading ? null : _fetchHistoryData,
+          onTap: _isLoading
+              ? null
+              : () async {
+                  await SyncManager().syncNow();
+                  await _fetchHistoryData();
+                },
           borderRadius: BorderRadius.circular(20),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -315,7 +411,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'Puncak: ${_peakUv.toStringAsFixed(1)}',
+                  'Puncak: ${_historyData.isEmpty ? "-" : _peakUv.toStringAsFixed(1)}',
                   style: const TextStyle(
                     color: Color(0xFFF59E0B),
                     fontSize: 11,
@@ -333,28 +429,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     key: const ValueKey('weekly_chart'),
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _buildBar('Sen', 0.40, false, isDark, '4.2'),
-                      _buildBar('Sel', 0.55, false, isDark, '5.8'),
-                      _buildBar('Rab', 0.70, false, isDark, '7.2'),
-                      _buildBar('Kam', (_peakUv / 11.0).clamp(0.2, 0.98), true, isDark, _peakUv.toStringAsFixed(1)),
-                      _buildBar('Jum', 0.60, false, isDark, '6.1'),
-                      _buildBar('Sab', 0.35, false, isDark, '3.8'),
-                      _buildBar('Min', 0.50, false, isDark, '5.0'),
-                    ],
+                    children: _weeklyBars.map((bar) {
+                      final heightFactor = bar.$2 > 0 ? (bar.$2 / 12.0).clamp(0.12, 1.0) : 0.08;
+                      final valText = bar.$2 > 0 ? bar.$2.toStringAsFixed(1) : '-';
+                      return _buildBar(bar.$1, heightFactor, bar.$3, isDark, valText);
+                    }).toList(),
                   )
                 : Row(
                     key: const ValueKey('daily_chart'),
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _buildBar('08:00', 0.20, false, isDark, '2.1'),
-                      _buildBar('10:00', 0.55, false, isDark, '5.5'),
-                      _buildBar('12:00', (_peakUv / 11.0).clamp(0.2, 0.98), true, isDark, _peakUv.toStringAsFixed(1)),
-                      _buildBar('14:00', 0.75, false, isDark, '7.8'),
-                      _buildBar('16:00', 0.40, false, isDark, '4.0'),
-                      _buildBar('18:00', 0.10, false, isDark, '0.5'),
-                    ],
+                    children: _dailyBars.map((bar) {
+                      final heightFactor = bar.$2 > 0 ? (bar.$2 / 12.0).clamp(0.12, 1.0) : 0.08;
+                      final valText = bar.$2 > 0 ? bar.$2.toStringAsFixed(1) : '-';
+                      return _buildBar(bar.$1, heightFactor, bar.$3, isDark, valText);
+                    }).toList(),
                   ),
           ),
         ],
@@ -424,30 +513,32 @@ class _HistoryScreenState extends State<HistoryScreen> {
         Expanded(
           child: _buildSmallCard(
             'Puncak UV',
-            _peakUv.toStringAsFixed(1),
+            _historyData.isEmpty ? '-' : _peakUv.toStringAsFixed(1),
             _peakUv >= 8 ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
             isDark,
-            subtitle: _peakUv >= 8 ? 'Ekstrem' : 'Sedang',
+            subtitle: _historyData.isEmpty
+                ? 'Belum Ada'
+                : (_peakUv >= 8 ? 'Ekstrem' : (_peakUv >= 6 ? 'Tinggi' : (_peakUv >= 3 ? 'Sedang' : 'Rendah'))),
           ),
         ),
         const SizedBox(width: 14),
         Expanded(
           child: _buildSmallCard(
             'Rata-rata Suhu',
-            '${_avgTemp.toStringAsFixed(1)}°C',
+            _historyData.isEmpty ? '-' : '${_avgTemp.toStringAsFixed(1)}°C',
             AppTheme.primary,
             isDark,
-            subtitle: 'RH ~62%',
+            subtitle: _historyData.isEmpty ? 'RH -' : 'RH ~${_avgHum.toStringAsFixed(0)}%',
           ),
         ),
         const SizedBox(width: 14),
         Expanded(
           child: _buildSmallCard(
             'Rata Gas VOC',
-            '$_avgVoc',
+            _historyData.isEmpty ? '-' : '$_avgVoc',
             _avgVoc >= 200 ? const Color(0xFFEF4444) : AppTheme.primary,
             isDark,
-            subtitle: _avgVoc >= 200 ? 'Waspada' : 'Baik',
+            subtitle: _historyData.isEmpty ? 'Belum Ada' : (_avgVoc >= 200 ? 'Waspada' : 'Baik'),
           ),
         ),
       ],
@@ -658,7 +749,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               const Icon(Icons.check_circle_outline, color: AppTheme.primary, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Kepatuhan Proteksi',
+                'Kepatuhan Ambang Aman',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: isDark ? Colors.white : AppTheme.textDark,
@@ -668,9 +759,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          _buildProgressRow('Oles ulang tepat waktu', '85%', 0.85, isDark),
+          _buildProgressRow(
+            'Paparan UV aman (< 3.0 UVI)',
+            '$_safeUvPercent%',
+            _safeUvPercent / 100.0,
+            isDark,
+          ),
           const SizedBox(height: 18),
-          _buildProgressRow('Target minum tercapai', '70%', 0.70, isDark),
+          _buildProgressRow(
+            'Suhu lingkungan nyaman (< 32°C)',
+            '$_comfortTempPercent%',
+            _comfortTempPercent / 100.0,
+            isDark,
+          ),
         ],
       ),
     );
@@ -716,6 +817,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildTipsCard(bool isDark) {
+    String tipsText;
+    if (_historyData.isEmpty) {
+      tipsText = 'Belum ada data rekaman sensor. Hubungkan perangkat IoT atau jalankan simulator untuk memulai monitoring mikroiklim secara real-time.';
+    } else if (_peakUv >= 8) {
+      tipsText = 'Terdeteksi paparan UV puncak ${_peakUv.toStringAsFixed(1)} (Ekstrem). Disarankan menggunakan sunscreen SPF 50+, pakaian protektif berlengan panjang, dan hindari paparan matahari langsung pada jam terik.';
+    } else if (_peakUv >= 6) {
+      tipsText = 'Paparan UV puncak ${_peakUv.toStringAsFixed(1)} (Tinggi). Gunakan pelindung topi, kacamata hitam, dan aplikasikan ulang tabir surya setiap 2 jam.';
+    } else if (_avgTemp >= 34) {
+      tipsText = 'Rata-rata suhu lingkungan tergolong panas (${_avgTemp.toStringAsFixed(1)}°C). Pastikan hidrasi cukup dan istirahat berkala di tempat teduh.';
+    } else {
+      tipsText = 'Kondisi mikrolingkungan stabil dan dalam batas ambang aman. Lanjutkan pemantauan rutin untuk perlindungan optimal.';
+    }
+
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -744,9 +858,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            _peakUv >= 8
-                ? 'Terdeteksi paparan UV puncak ${_peakUv.toStringAsFixed(1)} (Ekstrem). Selalu gunakan sunscreen SPF 50+ dan hindari matahari langsung jam 11:00 - 14:00.'
-                : 'Paparan lingkungan dalam batas aman terkendali. Lanjutkan kebiasaan baik menggunakan perlindungan ringan saat di luar ruangan.',
+            tipsText,
             style: TextStyle(
               color: isDark ? AppTheme.darkTextSecondary : AppTheme.primary,
               fontSize: 14,

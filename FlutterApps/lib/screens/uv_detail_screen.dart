@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 class UVDetailScreen extends StatelessWidget {
-  const UVDetailScreen({super.key});
+  final double? currentUv;
+  const UVDetailScreen({super.key, this.currentUv});
 
   @override
   Widget build(BuildContext context) {
@@ -112,6 +113,15 @@ class UVDetailScreen extends StatelessWidget {
   }
 
   Widget _buildCurrentUVCard(bool isDark) {
+    final uv = currentUv ?? 8.0;
+    final uvInt = uv.round().clamp(0, 15);
+    final uvStatus = uv >= 8.0
+        ? 'Sangat tinggi'
+        : (uv >= 6.0 ? 'Tinggi' : (uv >= 3.0 ? 'Sedang' : 'Rendah'));
+    final conditionLabel = uv >= 8.0
+        ? 'Terik (lux tinggi)'
+        : (uv >= 3.0 ? 'Cukup terang' : 'Teduh / sejuk');
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(22),
@@ -140,7 +150,7 @@ class UVDetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'UV 8 · Sangat tinggi',
+                  'UV ${uv.toStringAsFixed(1)} · $uvStatus',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -168,7 +178,7 @@ class UVDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Terik (lux tinggi)',
+                        conditionLabel,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -183,7 +193,7 @@ class UVDetailScreen extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           // Circular Gauge Widget
-          _buildGauge(current: 8, max: 11, isDark: isDark),
+          _buildGauge(current: uvInt, max: 11, isDark: isDark),
         ],
       ),
     );

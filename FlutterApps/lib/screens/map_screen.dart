@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/local_data_service.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -10,23 +13,29 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  final MapController _mapController = MapController();
   bool _shareLocation = true;
   String _selectedTab = 'UV'; // Default ke UV untuk tema utama Klimo
   List<dynamic> _heatmapData = [];
   bool _isLoading = false;
 
-  // Nilai metrik lingkungan hasil kalkulasi dari Backend API
-  double _avgUv = 4.8;
-  double _maxUv = 9.5;
-  double _minUv = 1.2;
+  // Koordinat lokasi pengguna saat ini (default area Jakarta Pusat)
+  double _currentUserLat = -6.200000;
+  double _currentUserLng = 106.816666;
+  double? _nearestSafeDistanceMeters;
 
-  double _avgTemp = 31.0;
-  double _maxTemp = 36.8;
-  double _minTemp = 26.5;
+  // Nilai metrik lingkungan hasil kalkulasi dinamis dari Backend API
+  double _avgUv = 0.0;
+  double _maxUv = 0.0;
+  double _minUv = 0.0;
 
-  int _avgVoc = 135;
-  int _maxVoc = 390;
-  int _minVoc = 55;
+  double _avgTemp = 0.0;
+  double _maxTemp = 0.0;
+  double _minTemp = 0.0;
+
+  int _avgVoc = 0;
+  int _maxVoc = 0;
+  int _minVoc = 0;
 
   @override
   void initState() {
@@ -39,7 +48,21 @@ class _MapScreenState extends State<MapScreen> {
       _isLoading = true;
     });
 
-    final data = await ApiService.getHeatmapData();
+    // 1. Ambil data telemetri terkini pengguna dari SQLite lokal untuk pinpoint lokasi
+    final cachedLatest = await LocalDataService.getLatest();
+    if (cachedLatest != null && cachedLatest.latitude != null && cachedLatest.longitude != null) {
+      _currentUserLat = cachedLatest.latitude!;
+      _currentUserLng = cachedLatest.longitude!;
+    }
+
+    // 2. Ambil data sebaran spasial mikroiklim dari Backend API Laravel
+    var data = await ApiService.getHeatmapData();
+
+    // 3. Fallback cerdas: jika backend offline/kosong, gunakan data historis lokal SQLite
+    if (data.isEmpty) {
+      final localRecords = await LocalDataService.getHistory(limit: 100);
+      data = localRecords.map((r) => r.toMap()).toList();
+    }
 
     if (!mounted) return;
 
@@ -48,11 +71,22 @@ class _MapScreenState extends State<MapScreen> {
       _isLoading = false;
       _computeMetrics();
     });
+
+    // Posisikan kamera peta ke titik koordinat pengguna
+    try {
+      _mapController.move(LatLng(_currentUserLat, _currentUserLng), 15.0);
+    } catch (_) {}
   }
 
-  /// Menghitung nilai statistik rata-rata, max, dan min dari titik telemetri API
+  /// Menghitung nilai statistik rata-rata, max, min, dan jarak zona aman dari titik telemetri API
   void _computeMetrics() {
-    if (_heatmapData.isEmpty) return;
+    if (_heatmapData.isEmpty) {
+      _avgUv = 0.0;
+      _avgTemp = 0.0;
+      _avgVoc = 0;
+      _nearestSafeDistanceMeters = null;
+      return;
+    }
 
     double totalUv = 0;
     double totalTemp = 0;
@@ -61,14 +95,21 @@ class _MapScreenState extends State<MapScreen> {
     int tempCount = 0;
     int vocCount = 0;
 
-    double maxUv = -1;
+    double maxUv = 0;
     double minUv = 999;
-    double maxTemp = -1;
+    double maxTemp = 0;
     double minTemp = 999;
-    int maxVoc = -1;
+    int maxVoc = 0;
     int minVoc = 9999;
 
+    final userPos = LatLng(_currentUserLat, _currentUserLng);
+    const distCalc = Distance();
+    double? minSafeDist;
+
     for (var item in _heatmapData) {
+      final lat = double.tryParse(item['latitude']?.toString() ?? '');
+      final lng = double.tryParse(item['longitude']?.toString() ?? '');
+
       if (item['uv_index'] != null) {
         double val = (item['uv_index'] as num).toDouble();
         totalUv += val;
@@ -90,23 +131,46 @@ class _MapScreenState extends State<MapScreen> {
         if (val > maxVoc) maxVoc = val;
         if (val < minVoc) minVoc = val;
       }
+
+      // Hitung jarak riil (geometri bola bumi) ke titik aman terdekat
+      if (lat != null && lng != null) {
+        bool isSafe = false;
+        if (_selectedTab == 'UV') {
+          final uv = (item['uv_index'] as num?)?.toDouble() ?? 0.0;
+          if (uv < 3.0) isSafe = true;
+        } else if (_selectedTab == 'Panas') {
+          final temp = (item['temperature'] as num?)?.toDouble() ?? 0.0;
+          if (temp < 28.0) isSafe = true;
+        } else {
+          final voc = (item['voc'] as num?)?.toInt() ?? 0;
+          if (voc < 100) isSafe = true;
+        }
+
+        if (isSafe) {
+          final d = distCalc.as(LengthUnit.Meter, userPos, LatLng(lat, lng));
+          if (minSafeDist == null || d < minSafeDist) {
+            minSafeDist = d;
+          }
+        }
+      }
     }
 
     if (uvCount > 0) {
       _avgUv = totalUv / uvCount;
       _maxUv = maxUv;
-      _minUv = minUv;
+      _minUv = minUv == 999 ? 0 : minUv;
     }
     if (tempCount > 0) {
       _avgTemp = totalTemp / tempCount;
       _maxTemp = maxTemp;
-      _minTemp = minTemp;
+      _minTemp = minTemp == 999 ? 0 : minTemp;
     }
     if (vocCount > 0) {
       _avgVoc = (totalVoc / vocCount).round();
       _maxVoc = maxVoc;
-      _minVoc = minVoc;
+      _minVoc = minVoc == 9999 ? 0 : minVoc;
     }
+    _nearestSafeDistanceMeters = minSafeDist;
   }
 
   @override
@@ -276,28 +340,121 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Widget _buildMapVisualization(bool isDark) {
-    // Tentukan label dan teks badge secara dinamis berdasarkan tab yang dipilih
-    String highLabel;
-    String midLabel;
-    String lowLabel;
+    // Generate circles dan markers dinamis dari data telemetri backend
+    final circles = <CircleMarker>[];
+    final markers = <Marker>[];
 
-    if (_selectedTab == 'UV') {
-      highLabel = 'UV ${_maxUv.toStringAsFixed(1)} · Ekstrem';
-      midLabel = 'UV ${_avgUv.toStringAsFixed(1)} · Sedang';
-      lowLabel = 'UV ${_minUv.toStringAsFixed(1)} · Teduh';
-    } else if (_selectedTab == 'Panas') {
-      highLabel = '${_maxTemp.toStringAsFixed(1)}°C · Terik';
-      midLabel = '${_avgTemp.toStringAsFixed(1)}°C · Hangat';
-      lowLabel = '${_minTemp.toStringAsFixed(1)}°C · Sejuk';
-    } else {
-      // Udara (VOC)
-      highLabel = 'VOC $_maxVoc · Buruk';
-      midLabel = 'VOC $_avgVoc · Sedang';
-      lowLabel = 'VOC $_minVoc · Segar';
+    for (var item in _heatmapData) {
+      final lat = double.tryParse(item['latitude']?.toString() ?? '');
+      final lng = double.tryParse(item['longitude']?.toString() ?? '');
+      if (lat == null || lng == null) continue;
+
+      Color circleColor;
+      Color borderColor;
+
+      if (_selectedTab == 'UV') {
+        final uv = (item['uv_index'] as num?)?.toDouble() ?? 0.0;
+        if (uv >= 8.0) {
+          circleColor = const Color(0xFFEF4444).withValues(alpha: 0.35);
+          borderColor = const Color(0xFFEF4444);
+        } else if (uv >= 3.0) {
+          circleColor = const Color(0xFFF59E0B).withValues(alpha: 0.35);
+          borderColor = const Color(0xFFF59E0B);
+        } else {
+          circleColor = const Color(0xFF10B981).withValues(alpha: 0.35);
+          borderColor = const Color(0xFF10B981);
+        }
+      } else if (_selectedTab == 'Panas') {
+        final temp = (item['temperature'] as num?)?.toDouble() ?? 0.0;
+        if (temp >= 35.0) {
+          circleColor = const Color(0xFFEF4444).withValues(alpha: 0.35);
+          borderColor = const Color(0xFFEF4444);
+        } else if (temp >= 28.0) {
+          circleColor = const Color(0xFFF59E0B).withValues(alpha: 0.35);
+          borderColor = const Color(0xFFF59E0B);
+        } else {
+          circleColor = const Color(0xFF10B981).withValues(alpha: 0.35);
+          borderColor = const Color(0xFF10B981);
+        }
+      } else {
+        // Udara (VOC)
+        final voc = (item['voc'] as num?)?.toInt() ?? 0;
+        if (voc >= 250) {
+          circleColor = const Color(0xFFEF4444).withValues(alpha: 0.35);
+          borderColor = const Color(0xFFEF4444);
+        } else if (voc >= 100) {
+          circleColor = const Color(0xFFF59E0B).withValues(alpha: 0.35);
+          borderColor = const Color(0xFFF59E0B);
+        } else {
+          circleColor = const Color(0xFF10B981).withValues(alpha: 0.35);
+          borderColor = const Color(0xFF10B981);
+        }
+      }
+
+      circles.add(
+        CircleMarker(
+          point: LatLng(lat, lng),
+          radius: 24,
+          useRadiusInMeter: false,
+          color: circleColor,
+          borderColor: borderColor.withValues(alpha: 0.7),
+          borderStrokeWidth: 1.5,
+        ),
+      );
     }
 
+    // Tambahkan pin penanda lokasi pengguna saat ini
+    markers.add(
+      Marker(
+        point: LatLng(_currentUserLat, _currentUserLng),
+        width: 100,
+        height: 48,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(
+                color: AppTheme.primary,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primary.withValues(alpha: 0.6),
+                    blurRadius: 8,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 3),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xDD0F172A) : const Color(0xEEFFFFFF),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: AppTheme.primary.withValues(alpha: 0.5),
+                  width: 0.8,
+                ),
+              ),
+              child: Text(
+                'Kamu di sini',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
     return Container(
-      height: 250,
+      height: 290,
       width: double.infinity,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF1F5F9),
@@ -311,147 +468,108 @@ class _MapScreenState extends State<MapScreen> {
         borderRadius: BorderRadius.circular(22),
         child: Stack(
           children: [
-            // Grid latar belakang peta subtle
-            Positioned.fill(
-              child: Opacity(
-                opacity: isDark ? 0.08 : 0.04,
-                child: CustomPaint(
-                  painter: _MapGridPainter(isDark: isDark),
+            FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: LatLng(_currentUserLat, _currentUserLng),
+                initialZoom: 15.0,
+                minZoom: 11.0,
+                maxZoom: 18.0,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.klimo.wearth',
+                  tileBuilder: isDark
+                      ? (context, tileWidget, tile) {
+                          return ColorFiltered(
+                            colorFilter: const ColorFilter.matrix([
+                              -0.85, 0, 0, 0, 255,
+                              0, -0.85, 0, 0, 255,
+                              0, 0, -0.85, 0, 255,
+                              0, 0, 0, 1, 0,
+                            ]),
+                            child: tileWidget,
+                          );
+                        }
+                      : null,
                 ),
-              ),
+                CircleLayer(circles: circles),
+                MarkerLayer(markers: markers),
+              ],
             ),
 
-            // Blob 1: Zona Bahaya / Tinggi (Merah)
+            // Kontrol Peta: Zoom & Pusat Lokasi Pengguna
             Positioned(
-              left: 20,
-              top: 20,
-              child: Container(
-                width: 150,
-                height: 150,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFFEF4444).withValues(alpha: isDark ? 0.35 : 0.25),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Blob 2: Zona Sedang (Kuning/Oranye)
-            Positioned(
-              right: 10,
-              top: 50,
-              child: Container(
-                width: 170,
-                height: 170,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.35 : 0.25),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Blob 3: Zona Aman / Baik (Hijau)
-            Positioned(
-              left: 50,
-              bottom: 10,
-              child: Container(
-                width: 140,
-                height: 140,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFF10B981).withValues(alpha: isDark ? 0.35 : 0.25),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Badge Dinamis - Zona Tinggi (Atas Kiri)
-            Positioned(
-              top: 30,
-              left: 36,
-              child: _buildMapLabel(
-                highLabel,
-                isDark ? const Color(0xFF2E1720) : const Color(0xFFFEE2E2),
-                const Color(0xFFF87171),
-                isDark,
-              ),
-            ),
-
-            // Badge Dinamis - Zona Sedang (Kanan)
-            Positioned(
-              right: 25,
-              top: 90,
-              child: _buildMapLabel(
-                midLabel,
-                isDark ? const Color(0xFF2D2517) : const Color(0xFFFEF3C7),
-                const Color(0xFFFBBF24),
-                isDark,
-              ),
-            ),
-
-            // Badge Dinamis - Zona Aman (Bawah Kiri)
-            Positioned(
-              bottom: 35,
-              left: 60,
-              child: _buildMapLabel(
-                lowLabel,
-                isDark ? const Color(0xFF132D27) : const Color(0xFFD1FAE5),
-                const Color(0xFF34D399),
-                isDark,
-              ),
-            ),
-
-            // Pin Lokasi Pengguna (Tengah)
-            Center(
+              right: 12,
+              bottom: 12,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 16,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.primary.withValues(alpha: 0.5),
-                          blurRadius: 10,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
+                  _buildMapControlButton(
+                    icon: Icons.add,
+                    onTap: () {
+                      _mapController.move(
+                        _mapController.camera.center,
+                        _mapController.camera.zoom + 1,
+                      );
+                    },
+                    isDark: isDark,
                   ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.black87 : Colors.white70,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Kamu di sini',
+                  const SizedBox(height: 6),
+                  _buildMapControlButton(
+                    icon: Icons.remove,
+                    onTap: () {
+                      _mapController.move(
+                        _mapController.camera.center,
+                        _mapController.camera.zoom - 1,
+                      );
+                    },
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 6),
+                  _buildMapControlButton(
+                    icon: Icons.my_location,
+                    onTap: () {
+                      _mapController.move(
+                        LatLng(_currentUserLat, _currentUserLng),
+                        15.0,
+                      );
+                    },
+                    isDark: isDark,
+                  ),
+                ],
+              ),
+            ),
+
+            // Badge Info Peta Spasial
+            Positioned(
+              left: 12,
+              top: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xDD0F172A) : const Color(0xEEFFFFFF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.public, size: 12, color: AppTheme.primary),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Peta Spasial Indonesia (OSM)',
                       style: TextStyle(
-                        fontSize: 9,
+                        fontSize: 10,
                         fontWeight: FontWeight.bold,
                         color: isDark ? Colors.white : AppTheme.textDark,
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -460,33 +578,34 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildMapLabel(String text, Color bgColor, Color textColor, bool isDark) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 250),
+  Widget _buildMapControlButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
       child: Container(
-        key: ValueKey(text),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        width: 34,
+        height: 34,
         decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(16),
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: textColor.withValues(alpha: 0.3),
+            color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 4,
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 6,
               offset: const Offset(0, 2),
-            )
+            ),
           ],
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: textColor,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: isDark ? Colors.white : AppTheme.textDark,
         ),
       ),
     );
@@ -560,17 +679,38 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  String _getRangeString() {
+    if (_selectedTab == 'UV') {
+      return '${_minUv.toStringAsFixed(1)} - ${_maxUv.toStringAsFixed(1)}';
+    } else if (_selectedTab == 'Panas') {
+      return '${_minTemp.toStringAsFixed(1)}°C - ${_maxTemp.toStringAsFixed(1)}°C';
+    } else {
+      return '$_minVoc - $_maxVoc VOC';
+    }
+  }
+
   Widget _buildStats(bool isDark) {
-    return Row(
-      children: [
-        _buildStatChip('Perangkatmu: Aktif', Icons.sensors, isDark),
-        const SizedBox(width: 10),
-        _buildStatChip(
-          'Komunitas: ${_heatmapData.isNotEmpty ? _heatmapData.length : 1} Titik Data',
-          Icons.people_outline,
-          isDark,
-        ),
-      ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildStatChip('Perangkatmu: Aktif', Icons.sensors, isDark),
+          const SizedBox(width: 10),
+          _buildStatChip(
+            'Komunitas: ${_heatmapData.isNotEmpty ? _heatmapData.length : 1} Titik Data',
+            Icons.people_outline,
+            isDark,
+          ),
+          if (_heatmapData.isNotEmpty) ...[
+            const SizedBox(width: 10),
+            _buildStatChip(
+              'Rentang: ${_getRangeString()}',
+              Icons.analytics_outlined,
+              isDark,
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -608,27 +748,38 @@ class _MapScreenState extends State<MapScreen> {
     IconData icon;
     Color iconColor;
 
+    String safeDistanceText;
+    if (_nearestSafeDistanceMeters != null) {
+      if (_nearestSafeDistanceMeters! < 1000) {
+        safeDistanceText = 'Area aman / teduh terdekat ${_nearestSafeDistanceMeters!.round()} m.';
+      } else {
+        safeDistanceText = 'Area aman / teduh terdekat ${(_nearestSafeDistanceMeters! / 1000).toStringAsFixed(1)} km.';
+      }
+    } else {
+      safeDistanceText = 'Pantau indikator sekitar atau gunakan pelindung diri.';
+    }
+
     if (_selectedTab == 'UV') {
       icon = Icons.wb_sunny_outlined;
       iconColor = _avgUv >= 8 ? const Color(0xFFEF4444) : (_avgUv >= 3 ? const Color(0xFFF59E0B) : AppTheme.primary);
       title = 'Sekitarmu: Rata-rata UV ${_avgUv.toStringAsFixed(1)} (${_avgUv >= 8 ? 'Tinggi/Ekstrem' : (_avgUv >= 3 ? 'Sedang' : 'Aman')})';
       subtitle = _avgUv >= 7
-          ? 'Radiasi matahari terik. Disarankan memakai sunscreen & topi.'
-          : 'Area aman untuk berjalan kaki. Area teduh terdekat 120 m.';
+          ? 'Radiasi matahari terik. Disarankan memakai sunscreen & topi. $safeDistanceText'
+          : 'Area aman untuk berjalan kaki. $safeDistanceText';
     } else if (_selectedTab == 'Panas') {
       icon = Icons.thermostat_outlined;
       iconColor = _avgTemp >= 35 ? const Color(0xFFEF4444) : (_avgTemp >= 28 ? const Color(0xFFF59E0B) : AppTheme.primary);
       title = 'Sekitarmu: Suhu rata-rata ${_avgTemp.toStringAsFixed(1)}°C';
       subtitle = _avgTemp >= 35
-          ? 'Potensi stres panas (heat stress). Perbanyak minum air mineral.'
-          : 'Suhu lingkungan cukup bersahabat untuk aktivitas luar ruangan.';
+          ? 'Potensi stres panas (heat stress). Perbanyak minum air mineral. $safeDistanceText'
+          : 'Suhu lingkungan cukup bersahabat untuk aktivitas luar. $safeDistanceText';
     } else {
       icon = Icons.air;
       iconColor = _avgVoc >= 250 ? const Color(0xFFEF4444) : (_avgVoc >= 100 ? const Color(0xFFF59E0B) : AppTheme.primary);
       title = 'Sekitarmu: Kualitas gas VOC $_avgVoc (${_avgVoc >= 250 ? 'Buruk' : (_avgVoc >= 100 ? 'Sedang' : 'Baik')})';
       subtitle = _avgVoc >= 250
-          ? 'Kadar senyawa organik volatil tinggi. Disarankan memakai masker.'
-          : 'Sirkulasi udara segar, ventilasi alami di sekitar baik.';
+          ? 'Kadar senyawa gas organik tinggi. Disarankan memakai masker. $safeDistanceText'
+          : 'Sirkulasi udara segar, ventilasi alami di sekitar baik. $safeDistanceText';
     }
 
     return Container(
@@ -748,28 +899,4 @@ class _MapScreenState extends State<MapScreen> {
       ),
     );
   }
-}
-
-/// Custom painter sederhana untuk menggambar aksen grid peta
-class _MapGridPainter extends CustomPainter {
-  final bool isDark;
-  _MapGridPainter({required this.isDark});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = isDark ? Colors.white : Colors.black
-      ..strokeWidth = 1;
-
-    const step = 40.0;
-    for (double x = 0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

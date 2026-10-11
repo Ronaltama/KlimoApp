@@ -36,14 +36,35 @@ class BleSimulatorService {
 
   static const String _deviceMac = '00:1B:44:11:3A:B7';
   static const String _deviceName = 'Klimo-A3F2';
-  static const int _intervalSeconds = 3;
+  int _intervalSeconds = 3;
+
+  int get intervalSeconds => _intervalSeconds;
+
+  void setInterval(int seconds) {
+    if (seconds <= 0) return;
+    _intervalSeconds = seconds;
+    if (_simulationTimer != null && _simulationTimer!.isActive) {
+      _simulationTimer!.cancel();
+      _simulationTimer = Timer.periodic(
+        Duration(seconds: _intervalSeconds),
+        (_) => _generateAndEmit(),
+      );
+    }
+  }
 
   final _random = Random();
   Timer? _simulationTimer;
   BleConnectionStatus _status = BleConnectionStatus.disconnected;
-  BleSimMode _mode = BleSimMode.auto;
+  BleSimMode _mode = BleSimMode.normal;
   OnTelemetryReceived? _onDataReceived;
   TelemetryRecord? _lastRecord;
+
+  // Nilai telemetri dinamis (berubah secara halus / smooth random walk)
+  double _simUv = 1.8;
+  double _simTemp = 27.5;
+  double _simHum = 65.0;
+  int _simVoc = 55;
+  int _simBattery = 88;
 
   // ValueNotifier untuk reaktif UI
   final _statusNotifier = StreamController<BleConnectionStatus>.broadcast();
@@ -55,24 +76,41 @@ class BleSimulatorService {
   BleConnectionStatus get status => _status;
   TelemetryRecord? get lastRecord => _lastRecord;
   String get deviceName => _deviceName;
+  BleSimMode get currentMode => _mode;
+  int get batteryPercentage => _simBattery;
+
+  String get modeName {
+    switch (_mode) {
+      case BleSimMode.normal:
+        return 'Normal / Sejuk';
+      case BleSimMode.uvExtreme:
+        return 'Panas Ekstrem';
+      case BleSimMode.pollution:
+        return 'Polusi Udara';
+      case BleSimMode.auto:
+        return 'Otomatis';
+    }
+  }
+
   bool get isActive => _status == BleConnectionStatus.connected ||
                        _status == BleConnectionStatus.simulating;
 
   /// Mulai simulasi BLE virtual (mode demo tanpa alat fisik)
   void startSimulation({
-    BleSimMode mode = BleSimMode.auto,
+    BleSimMode mode = BleSimMode.normal,
     OnTelemetryReceived? onData,
   }) {
     _mode = mode;
+    _resetSimValuesForMode(mode);
     _onDataReceived = onData;
     _setStatus(BleConnectionStatus.scanning);
 
-    // Simulasikan delay "scanning" 1.5 detik sebelum "tersambung"
-    Future.delayed(const Duration(milliseconds: 1500), () {
+    // Simulasikan delay "scanning" 1.2 detik sebelum "tersambung"
+    Future.delayed(const Duration(milliseconds: 1200), () {
       _setStatus(BleConnectionStatus.simulating);
       _simulationTimer?.cancel();
       _simulationTimer = Timer.periodic(
-        const Duration(seconds: _intervalSeconds),
+        Duration(seconds: _intervalSeconds),
         (_) => _generateAndEmit(),
       );
       // Langsung emit data pertama tanpa menunggu timer
@@ -80,9 +118,41 @@ class BleSimulatorService {
     });
   }
 
-  /// Ubah mode simulasi tanpa henti
+  /// Ubah mode simulasi seketika dan langsung broadcast data baru
   void changeMode(BleSimMode newMode) {
     _mode = newMode;
+    _resetSimValuesForMode(newMode);
+    // Langsung perbarui data telemetri agar UI responsif seketika
+    _generateAndEmit();
+  }
+
+  void _resetSimValuesForMode(BleSimMode mode) {
+    switch (mode) {
+      case BleSimMode.normal:
+        _simUv = 1.8;
+        _simTemp = 27.2;
+        _simHum = 65.0;
+        _simVoc = 55;
+        break;
+      case BleSimMode.uvExtreme:
+        _simUv = 10.5;
+        _simTemp = 37.5;
+        _simHum = 43.0;
+        _simVoc = 125;
+        break;
+      case BleSimMode.pollution:
+        _simUv = 3.2;
+        _simTemp = 30.2;
+        _simHum = 72.0;
+        _simVoc = 435;
+        break;
+      case BleSimMode.auto:
+        _simUv = 2.4;
+        _simTemp = 28.5;
+        _simHum = 60.0;
+        _simVoc = 75;
+        break;
+    }
   }
 
   /// Hentikan simulasi / disconnect
@@ -141,46 +211,49 @@ class BleSimulatorService {
   }
 
   TelemetryRecord _generateRecord(BleSimMode mode) {
-    double uv, temp, hum;
-    int voc;
-
+    // Fluktuasi mikro halus realistis (bukan lonjakan acak ekstrim)
     switch (mode) {
       case BleSimMode.normal:
-        uv = _rnd(1.0, 2.5);
-        temp = _rnd(26.0, 28.5);
-        hum = _rnd(60.0, 70.0);
-        voc = _rndInt(40, 90);
+        _simUv = (_simUv + _rnd(-0.05, 0.05)).clamp(1.2, 2.5);
+        _simTemp = (_simTemp + _rnd(-0.1, 0.1)).clamp(26.0, 28.5);
+        _simHum = (_simHum + _rnd(-0.2, 0.2)).clamp(60.0, 70.0);
+        _simVoc = (_simVoc + _rndInt(-2, 2)).clamp(40, 85);
         break;
       case BleSimMode.uvExtreme:
-        uv = _rnd(10.0, 11.8);
-        temp = _rnd(36.0, 39.5);
-        hum = _rnd(40.0, 50.0);
-        voc = _rndInt(100, 160);
+        _simUv = (_simUv + _rnd(-0.08, 0.08)).clamp(9.8, 11.6);
+        _simTemp = (_simTemp + _rnd(-0.1, 0.1)).clamp(36.5, 39.0);
+        _simHum = (_simHum + _rnd(-0.2, 0.2)).clamp(40.0, 50.0);
+        _simVoc = (_simVoc + _rndInt(-3, 3)).clamp(105, 155);
         break;
       case BleSimMode.pollution:
-        uv = _rnd(2.5, 4.0);
-        temp = _rnd(29.0, 32.0);
-        hum = _rnd(65.0, 80.0);
-        voc = _rndInt(380, 480);
+        _simUv = (_simUv + _rnd(-0.05, 0.05)).clamp(2.5, 3.8);
+        _simTemp = (_simTemp + _rnd(-0.1, 0.1)).clamp(29.0, 31.8);
+        _simHum = (_simHum + _rnd(-0.3, 0.3)).clamp(68.0, 78.0);
+        _simVoc = (_simVoc + _rndInt(-4, 4)).clamp(395, 475);
         break;
       case BleSimMode.auto:
-        uv = _rnd(0.5, 11.5);
-        temp = _rnd(25.0, 38.0);
-        hum = _rnd(45.0, 85.0);
-        voc = _rndInt(30, 450);
+        _simUv = (_simUv + _rnd(-0.1, 0.1)).clamp(1.5, 7.5);
+        _simTemp = (_simTemp + _rnd(-0.1, 0.1)).clamp(27.0, 34.0);
+        _simHum = (_simHum + _rnd(-0.2, 0.2)).clamp(50.0, 80.0);
+        _simVoc = (_simVoc + _rndInt(-3, 3)).clamp(45, 180);
         break;
     }
 
-    // GPS area Jakarta Pusat (bergerak sedikit setiap kali - simulasi pengguna bergerak)
-    final lat = -6.200000 + (_random.nextDouble() - 0.5) * 0.01;
-    final lng = 106.816666 + (_random.nextDouble() - 0.5) * 0.01;
+    // Simulasi baterai berkurang perlahan seiring penggunaan alat
+    if (_random.nextDouble() < 0.05 && _simBattery > 20) {
+      _simBattery--;
+    }
+
+    // GPS area Jakarta Pusat (bergeser mikro)
+    final lat = -6.200000 + (_random.nextDouble() - 0.5) * 0.0005;
+    final lng = 106.816666 + (_random.nextDouble() - 0.5) * 0.0005;
 
     return TelemetryRecord(
       macAddress: _deviceMac,
-      uvIndex: double.parse(uv.toStringAsFixed(1)),
-      temperature: double.parse(temp.toStringAsFixed(1)),
-      humidity: double.parse(hum.toStringAsFixed(1)),
-      voc: voc,
+      uvIndex: double.parse(_simUv.toStringAsFixed(1)),
+      temperature: double.parse(_simTemp.toStringAsFixed(1)),
+      humidity: double.parse(_simHum.toStringAsFixed(1)),
+      voc: _simVoc,
       latitude: double.parse(lat.toStringAsFixed(6)),
       longitude: double.parse(lng.toStringAsFixed(6)),
       timestamp: DateTime.now(),
