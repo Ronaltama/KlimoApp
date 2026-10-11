@@ -21,6 +21,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
   String _savedDeviceName = 'Klimo Wearth C3-4A1B';
   bool _isLoading = true;
   double _tempOffset = 0.0;
+  bool _showTechSpecs = false; // Informasi teknis hardware dapat dilipat
 
   final _ble = BleSimulatorService();
   final _sync = SyncManager();
@@ -124,18 +125,18 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 const SizedBox(height: 20),
                 _buildDeviceCard(isDark),
                 const SizedBox(height: 16),
-                _buildHardwareSpecsCard(isDark),
-                const SizedBox(height: 16),
                 _buildSensorStatusCard(isDark),
                 const SizedBox(height: 16),
                 _buildPowerSavingCard(isDark),
+                const SizedBox(height: 16),
+                _buildVibrationPatternCard(isDark),
                 const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
                       child: _buildActionButton(
                         Icons.thermostat_outlined,
-                        'Kalibrasi suhu',
+                        'Kalibrasi Suhu Tubuh',
                         isDark,
                         onTap: () => _showCalibrationDialog(context, isDark),
                       ),
@@ -144,14 +145,14 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     Expanded(
                       child: _buildActionButton(
                         Icons.vibration,
-                        'Tes getar',
+                        'Tes Getar Gelang',
                         isDark,
                         onTap: () {
                           HapticFeedback.heavyImpact();
                           if (_ble.isActive) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Sinyal getar haptic terkirim ke $_savedDeviceName via BLE!'),
+                                content: Text('Sinyal getar alarm terkirim ke $_savedDeviceName!'),
                                 backgroundColor: AppTheme.primary,
                                 duration: const Duration(seconds: 2),
                               ),
@@ -159,7 +160,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Alat tidak terhubung. Menguji getaran haptic motor ponsel.'),
+                                content: Text('Alat tidak terhubung. Menguji getaran motor ponsel.'),
                                 duration: Duration(seconds: 2),
                               ),
                             );
@@ -170,7 +171,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                _buildVibrationPatternCard(isDark),
+                _buildHardwareSpecsCard(isDark),
                 const SizedBox(height: 24),
               ],
             ),
@@ -289,25 +290,25 @@ class _DeviceScreenState extends State<DeviceScreen> {
       case BleConnectionStatus.connected:
         statusBg = isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5);
         statusColor = AppTheme.primary;
-        statusText = 'BLE Terhubung';
+        statusText = 'Gelang Terhubung';
         statusIcon = Icons.bluetooth_connected;
         break;
       case BleConnectionStatus.simulating:
         statusBg = isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5);
         statusColor = AppTheme.primary;
-        statusText = 'Simulator Aktif';
-        statusIcon = Icons.check_circle;
+        statusText = 'Simulasi Virtual Aktif';
+        statusIcon = Icons.computer;
         break;
       case BleConnectionStatus.scanning:
         statusBg = isDark ? const Color(0xFF332313) : const Color(0xFFFEF3C7);
         statusColor = const Color(0xFFF59E0B);
-        statusText = 'Memindai...';
+        statusText = 'Memindai Perangkat...';
         statusIcon = Icons.bluetooth_searching;
         break;
       case BleConnectionStatus.disconnected:
         statusBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
         statusColor = isDark ? AppTheme.darkTextSecondary : AppTheme.textLight;
-        statusText = 'Terputus';
+        statusText = 'Belum Terhubung';
         statusIcon = Icons.bluetooth_disabled;
         break;
     }
@@ -470,6 +471,33 @@ class _DeviceScreenState extends State<DeviceScreen> {
               ),
             ],
           ),
+          if (_bleStatus == BleConnectionStatus.simulating) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, size: 15, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Aplikasi sedang menampilkan data simulasi virtual. Anda dapat mematikan Mode Demo di menu Profil jika ingin menyambungkan gelang fisik via Bluetooth.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textDark,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -481,10 +509,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
         : (_ble.isActive ? '00:1B:44:11:3A:B7' : '-');
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
         ),
@@ -492,25 +520,47 @@ class _DeviceScreenState extends State<DeviceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.memory, color: AppTheme.primary, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Spesifikasi Hardware',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  color: isDark ? Colors.white : AppTheme.textDark,
+          InkWell(
+            onTap: () {
+              setState(() {
+                _showTechSpecs = !_showTechSpecs;
+              });
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.tune, color: AppTheme.primary, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Informasi Teknis Perangkat (Lanjutan)',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: isDark ? Colors.white : AppTheme.textDark,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                Icon(
+                  _showTechSpecs ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                  size: 20,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 14),
-          _buildSpecRow('MAC Address', macAddress, isDark),
-          _buildSpecRow('Versi Firmware', 'v1.2.0 (PlatformIO / ESP-IDF)', isDark),
-          _buildSpecRow('Konektivitas', 'BLE 5.0 GATT & WiFi 2.4GHz', isDark),
-          _buildSpecRow('Mikrokontroler', 'Espressif ESP32-C3 RISC-V 160MHz', isDark),
+          if (_showTechSpecs) ...[
+            const SizedBox(height: 14),
+            Divider(height: 1, color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight),
+            const SizedBox(height: 10),
+            _buildSpecRow('MAC Address', macAddress, isDark),
+            _buildSpecRow('Versi Firmware', 'v1.2.0 (PlatformIO / ESP-IDF)', isDark),
+            _buildSpecRow('Protokol Transmisi', 'BLE 5.0 GATT & WiFi 2.4GHz', isDark),
+            _buildSpecRow('Mikrokontroler', 'Espressif ESP32-C3 RISC-V 160MHz', isDark),
+          ],
         ],
       ),
     );
@@ -525,14 +575,14 @@ class _DeviceScreenState extends State<DeviceScreen> {
           Text(
             label,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 12,
               color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
             ),
           ),
           Text(
             value,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
               color: isDark ? Colors.white : AppTheme.textDark,
             ),
@@ -546,13 +596,11 @@ class _DeviceScreenState extends State<DeviceScreen> {
     final record = _ble.lastRecord;
     final isOnline = _ble.isActive && record != null;
 
-    final uvText = isOnline ? 'Aktif (${record.uvIndex.toStringAsFixed(1)} UVI)' : 'Offline';
-    final tempText = isOnline
-        ? 'Aktif (${(record.temperature + _tempOffset).toStringAsFixed(1)}°C / ${record.humidity.toStringAsFixed(0)}%)'
+    final uvStatus = isOnline ? '${record.uvIndex.toStringAsFixed(1)} UVI' : 'Offline';
+    final tempStatus = isOnline
+        ? '${(record.temperature + _tempOffset).toStringAsFixed(1)}°C / ${record.humidity.toStringAsFixed(0)}%'
         : 'Offline';
-    final vocText = isOnline ? 'Aktif (${record.voc} ppm)' : 'Offline';
-    final lightText = isOnline ? 'Terkalibrasi (Ambient Lux)' : 'Offline';
-    final imuText = isOnline ? 'Siaga (6-Axis IMU)' : 'Offline';
+    final vocStatus = isOnline ? '${record.voc} VOC' : 'Offline';
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -569,13 +617,19 @@ class _DeviceScreenState extends State<DeviceScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Status Sensor Fisik',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: isDark ? Colors.white : AppTheme.textDark,
-                ),
+              Row(
+                children: [
+                  const Icon(Icons.sensors, color: AppTheme.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Status Sensor Fisik',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: isDark ? Colors.white : AppTheme.textDark,
+                    ),
+                  ),
+                ],
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -586,7 +640,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  isOnline ? 'Real-Time Live' : 'Sensor Mati',
+                  isOnline ? 'Terhubung & Aktif' : 'Sensor Mati',
                   style: TextStyle(
                     color: isOnline ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
                     fontSize: 11,
@@ -597,17 +651,74 @@ class _DeviceScreenState extends State<DeviceScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          _buildSensorRow(Icons.wb_sunny_outlined, 'Sensor UV (LTR-390 / Analog)', uvText, isOnline, isDark),
-          _buildSensorRow(Icons.thermostat_outlined, 'Suhu & Kelembapan (SHT40)', tempText, isOnline, isDark),
-          _buildSensorRow(Icons.air, 'Gas VOC & Udara (SGP41)', vocText, isOnline, isDark),
-          _buildSensorRow(Icons.lightbulb_outline, 'Sensor Cahaya (Lux)', lightText, isOnline, isDark),
-          _buildSensorRow(Icons.timeline, 'Accelerometer (Gerak Pengguna)', imuText, isOnline, isDark),
+          _buildSensorRow(
+            icon: Icons.wb_sunny_outlined,
+            name: 'Sensor Radiasi UV (Matahari)',
+            desc: 'Mengukur sengatan sinar matahari langsung',
+            statusText: uvStatus,
+            isOnline: isOnline,
+            isDark: isDark,
+          ),
+          _buildSensorRow(
+            icon: Icons.thermostat_outlined,
+            name: 'Sensor Suhu & Kelembapan',
+            desc: 'Mengukur panas sekitar & kelembapan udara',
+            statusText: tempStatus,
+            isOnline: isOnline,
+            isDark: isDark,
+          ),
+          _buildSensorRow(
+            icon: Icons.air,
+            name: 'Sensor Kualitas Udara (Gas)',
+            desc: 'Mendeteksi polusi & senyawa gas berbahaya',
+            statusText: vocStatus,
+            isOnline: isOnline,
+            isDark: isDark,
+          ),
+          _buildSensorRow(
+            icon: Icons.vibration,
+            name: 'Alarm Getar Gelang (Haptic)',
+            desc: 'Alarm fisik saat bahaya cuaca terdeteksi',
+            statusText: isOnline ? 'Siaga Bergetar' : 'Offline',
+            isOnline: isOnline,
+            isDark: isDark,
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF101B2B) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.shield_outlined, size: 14, color: AppTheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Sensor bekerja terus-menerus dan otomatis memberi getaran jika parameter lingkungan melewati batas aman.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSensorRow(IconData icon, String name, String statusText, bool isOnline, bool isDark) {
+  Widget _buildSensorRow({
+    required IconData icon,
+    required String name,
+    required String desc,
+    required String statusText,
+    required bool isOnline,
+    required bool isDark,
+  }) {
     final statusColor = isOnline ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight);
 
     return Padding(
@@ -615,37 +726,54 @@ class _DeviceScreenState extends State<DeviceScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Icon(
-                icon,
-                color: isOnline ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
-                size: 18,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                name,
-                style: TextStyle(
-                  color: isDark ? Colors.white : AppTheme.textDark,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+          Expanded(
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  color: isOnline ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                  size: 20,
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : AppTheme.textDark,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        desc,
+                        style: TextStyle(
+                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          Row(
-            children: [
-              Icon(Icons.circle, color: statusColor, size: 7),
-              const SizedBox(width: 6),
-              Text(
-                statusText,
-                style: TextStyle(
-                  color: statusColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: isDark ? 0.18 : 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              statusText,
+              style: TextStyle(
+                color: statusColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -654,7 +782,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   Widget _buildPowerSavingCard(bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : AppTheme.card,
         borderRadius: BorderRadius.circular(24),
@@ -662,50 +790,107 @@ class _DeviceScreenState extends State<DeviceScreen> {
           color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Mode hemat daya',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  color: isDark ? Colors.white : AppTheme.textDark,
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: _powerSaving
+                            ? const Color(0xFF10B981).withValues(alpha: isDark ? 0.2 : 0.12)
+                            : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _powerSaving ? Icons.battery_saver : Icons.battery_charging_full,
+                        color: _powerSaving ? const Color(0xFF10B981) : AppTheme.primary,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Mode Hemat Baterai Gelang',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: isDark ? Colors.white : AppTheme.textDark,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _powerSaving
+                                ? 'Aktif: Baterai awet hingga 24+ jam'
+                                : 'Nonaktif: Pembaruan data cepat & responsif',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: _powerSaving ? const Color(0xFF10B981) : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                              fontWeight: _powerSaving ? FontWeight.w600 : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                'Interval pengiriman: ${_powerSaving ? "10 detik" : "3 detik"}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                ),
+              Switch(
+                value: _powerSaving,
+                onChanged: (val) {
+                  setState(() {
+                    _powerSaving = val;
+                  });
+                  _ble.setInterval(val ? 15 : 3);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        val
+                            ? 'Mode hemat daya aktif. Sensor membaca tiap 15 detik untuk menghemat baterai gelang.'
+                            : 'Mode responsif aktif. Sensor membaca tiap 3 detik untuk data real-time.',
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                activeThumbColor: Colors.white,
+                activeTrackColor: AppTheme.primary,
               ),
             ],
           ),
-          Switch(
-            value: _powerSaving,
-            onChanged: (val) {
-              setState(() {
-                _powerSaving = val;
-              });
-              _ble.setInterval(val ? 10 : 3);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    val
-                        ? 'Mode hemat daya aktif. Interval transmisi sensor diubah ke 10 detik.'
-                        : 'Mode responsif aktif. Interval transmisi sensor diubah ke 3 detik.',
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF101B2B) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, size: 14, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _powerSaving
+                        ? 'Pengiriman data diatur tiap 15 detik. Cocok saat Anda beraktivitas seharian di luar tanpa charger.'
+                        : 'Pengiriman data diatur tiap 3 detik. Cocok saat pemantauan intensif di kondisi cuaca ekstrem.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                      height: 1.35,
+                    ),
                   ),
-                  duration: const Duration(milliseconds: 1500),
                 ),
-              );
-            },
-            activeThumbColor: Colors.white,
-            activeTrackColor: AppTheme.primary,
+              ],
+            ),
           ),
         ],
       ),
@@ -736,61 +921,136 @@ class _DeviceScreenState extends State<DeviceScreen> {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : const Color(0xFFF0FDF4),
+        color: isDark ? AppTheme.darkCard : Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFDCFCE7),
+          color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              const Icon(Icons.vibration, color: AppTheme.primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Arti Pola Getaran Gelang',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
           Text(
-            'Pola Peringatan Getar (Haptic)',
+            'Gelang akan bergetar otomatis untuk memberi tahu kondisi bahaya:',
             style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: isDark ? Colors.white : AppTheme.textDark,
+              fontSize: 12,
+              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
             ),
           ),
           const SizedBox(height: 16),
-          Wrap(
-            spacing: 14,
-            runSpacing: 10,
-            children: [
-              _buildPatternLegend(AppTheme.primary, 'UV: 2 getar pendek', isDark),
-              _buildPatternLegend(
-                isDark ? AppTheme.darkTextSecondary : const Color(0xFFF59E0B),
-                'Panas: 1 getar panjang',
-                isDark,
-              ),
-              _buildPatternLegend(
-                isDark ? AppTheme.darkTextSecondary : const Color(0xFFEF4444),
-                'Udara: 3 getar pendek',
-                isDark,
-              ),
-            ],
+          _buildVibrationItem(
+            icon: Icons.wb_sunny_outlined,
+            iconColor: const Color(0xFFF59E0B),
+            condition: 'Sinar UV Ekstrem',
+            pattern: '2x Getaran Pendek',
+            advice: 'Gunakan tabir surya & topi',
+            isDark: isDark,
+          ),
+          const SizedBox(height: 10),
+          _buildVibrationItem(
+            icon: Icons.thermostat_outlined,
+            iconColor: const Color(0xFFEF4444),
+            condition: 'Suhu Panas Berlebih',
+            pattern: '1x Getaran Panjang',
+            advice: 'Segera berteduh & minum air',
+            isDark: isDark,
+          ),
+          const SizedBox(height: 10),
+          _buildVibrationItem(
+            icon: Icons.air,
+            iconColor: const Color(0xFF3B82F6),
+            condition: 'Polusi Gas Berbahaya',
+            pattern: '3x Getaran Pendek',
+            advice: 'Gunakan masker pelindung',
+            isDark: isDark,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPatternLegend(Color dotColor, String label, bool isDark) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.circle, color: dotColor, size: 7),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(
-            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
+  Widget _buildVibrationItem({
+    required IconData icon,
+    required Color iconColor,
+    required String condition,
+    required String pattern,
+    required String advice,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
         ),
-      ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: isDark ? 0.2 : 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: iconColor, size: 16),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  condition,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+                Text(
+                  'Tindakan: $advice',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              pattern,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

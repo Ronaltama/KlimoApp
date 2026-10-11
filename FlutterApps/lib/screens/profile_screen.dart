@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/local_data_service.dart';
@@ -18,6 +19,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _skinType = 'Tipe IV';
   String _deviceName = 'Klimo Wearth C3-4A1B';
   bool _isLoading = true;
+  bool _isDemoMode = true;
 
   int _activeDays = 1;
   int _protectionScore = 100;
@@ -27,6 +29,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _loadDemoMode();
     _fetchProfile();
     _ble.statusStream.listen((_) {
       if (mounted) setState(() {});
@@ -34,6 +37,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _ble.recordStream.listen((_) {
       if (mounted) setState(() {});
     });
+  }
+
+  Future<void> _loadDemoMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _isDemoMode = prefs.getBool('demo_system_mode') ?? true;
+      });
+    }
+  }
+
+  Future<void> _toggleDemoMode(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('demo_system_mode', value);
+    setState(() {
+      _isDemoMode = value;
+    });
+
+    if (value) {
+      _ble.startSimulation(mode: _ble.currentMode);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Mode Demo diaktifkan. Data simulasi lingkungan aktif.'),
+          backgroundColor: AppTheme.primary,
+        ),
+      );
+    } else {
+      _ble.stop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Mode Demo dimatikan. Beralih ke data riil Bluetooth.'),
+          backgroundColor: Color(0xFF10B981),
+        ),
+      );
+    }
   }
 
   Future<void> _fetchProfile() async {
@@ -319,7 +359,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 28),
+                _buildProtectionScoreExplainer(isDark),
+                const SizedBox(height: 24),
 
                 // Bagian Tipe Kulit & Proteksi
                 Text(
@@ -345,6 +386,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 12),
                 _buildMyDeviceCard(isDark),
+
+                const SizedBox(height: 24),
+                // Bagian Mode Demo Sistem & Simulator
+                Text(
+                  'Mode Demo Sistem',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildDemoModeCard(isDark),
 
                 const SizedBox(height: 24),
                 // Opsi Reset Onboarding (Untuk Pengujian & Evaluasi)
@@ -545,70 +599,173 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildSkinTypeCard(bool isDark) {
-    const skinMeta = {
-      'Tipe I': {'desc': 'Sangat terang · selalu terbakar', 'color': Color(0xFFF1D4B3)},
-      'Tipe II': {'desc': 'Terang · mudah terbakar', 'color': Color(0xFFDFAB87)},
-      'Tipe III': {'desc': 'Sedang · kadang terbakar', 'color': Color(0xFFC78B60)},
-      'Tipe IV': {'desc': 'Sawo matang · jarang terbakar', 'color': Color(0xFFA56637)},
-      'Tipe V': {'desc': 'Cokelat · sangat jarang terbakar', 'color': Color(0xFF703D1A)},
-      'Tipe VI': {'desc': 'Gelap · hampir tidak terbakar', 'color': Color(0xFF3B1E0D)},
-    };
-
-    final meta = skinMeta[_skinType] ?? skinMeta['Tipe IV']!;
-    final Color skinColor = meta['color'] as Color;
-    final String skinDesc = meta['desc'] as String;
-
+  Widget _buildProtectionScoreExplainer(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(20),
+        color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
+          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: skinColor.withValues(alpha: 0.25),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.wb_sunny_outlined, color: skinColor, size: 22),
-          ),
-          const SizedBox(width: 14),
+          const Icon(Icons.shield_outlined, size: 16, color: AppTheme.primary),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _skinType,
+                  'Cara Menghitung Skor Proteksi ($_protectionScore%)',
                   style: TextStyle(
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    fontSize: 15,
                     color: isDark ? Colors.white : AppTheme.textDark,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
-                  skinDesc,
+                  'Dihitung dari persentase waktu Anda berada di kondisi lingkungan aman (UV < 6.0 & Suhu < 33°C) dari total riwayat pengukuran. Semakin tinggi skor, semakin optimal kebiasaan perlindungan diri Anda.',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 11,
                     color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                    height: 1.35,
                   ),
                 ),
               ],
             ),
           ),
-          TextButton(
-            onPressed: _handleChangeSkinType,
-            style: TextButton.styleFrom(
-              foregroundColor: AppTheme.primary,
-              textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSkinTypeCard(bool isDark) {
+    const skinMeta = {
+      'Tipe I': {'desc': 'Sangat terang · selalu terbakar', 'color': Color(0xFFF1D4B3), 'spf': 'SPF 50+ (Ekstra Proteksi)'},
+      'Tipe II': {'desc': 'Terang · mudah terbakar', 'color': Color(0xFFDFAB87), 'spf': 'SPF 50 (Sangat Rentan)'},
+      'Tipe III': {'desc': 'Sedang · kadang terbakar', 'color': Color(0xFFC78B60), 'spf': 'SPF 30 - 50 (Rentan)'},
+      'Tipe IV': {'desc': 'Sawo matang · jarang terbakar', 'color': Color(0xFFA56637), 'spf': 'SPF 30+ (Perlindungan Normal)'},
+      'Tipe V': {'desc': 'Cokelat · sangat jarang terbakar', 'color': Color(0xFF703D1A), 'spf': 'SPF 30 (Alami Tahan)'},
+      'Tipe VI': {'desc': 'Gelap · hampir tidak terbakar', 'color': Color(0xFF3B1E0D), 'spf': 'SPF 30 (Perlindungan Dasar)'},
+    };
+
+    final meta = skinMeta[_skinType] ?? skinMeta['Tipe IV']!;
+    final Color skinColor = meta['color'] as Color;
+    final String skinDesc = meta['desc'] as String;
+    final String spfRec = (meta['spf'] as String?) ?? 'SPF 30+';
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.card,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: skinColor.withValues(alpha: 0.25),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.wb_sunny_outlined, color: skinColor, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _skinType,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: isDark ? Colors.white : AppTheme.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      skinDesc,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: _handleChangeSkinType,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primary,
+                  textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                child: const Text('Ubah'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: isDark ? 0.15 : 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppTheme.primary.withValues(alpha: 0.25),
+              ),
             ),
-            child: const Text('Ubah'),
+            child: Row(
+              children: [
+                const Icon(Icons.verified_outlined, size: 16, color: AppTheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Rekomendasi Tabir Surya: $spfRec',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.help_outline, size: 15, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Mengapa Tipe Kulit Penting? Kadar melanin kulit menentukan daya tahan alami terhadap radiasi ultraviolet (UV). Klimo menggunakan data ini untuk menghitung kebutuhan SPF dan timer pengingat oles tabir surya di Beranda.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textDark,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -699,6 +856,177 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildDemoModeCard(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _isDemoMode
+                      ? AppTheme.primary.withValues(alpha: 0.15)
+                      : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _isDemoMode ? Icons.science_outlined : Icons.bluetooth_searching,
+                  color: _isDemoMode ? AppTheme.primary : AppTheme.textLight,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Demo Sistem & Simulator',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : AppTheme.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _isDemoMode
+                          ? 'Aktif: Simulasi virtual aktif untuk demo fitur'
+                          : 'Nonaktif: Menggunakan koneksi Bluetooth fisik riil',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: _isDemoMode,
+                activeTrackColor: AppTheme.primary,
+                onChanged: _toggleDemoMode,
+              ),
+            ],
+          ),
+          if (_isDemoMode) ...[
+            const SizedBox(height: 18),
+            Divider(
+              height: 1,
+              color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Pilih Kondisi Cuaca Simulasi:',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : AppTheme.textDark,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ..._buildSimOptions(isDark),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildSimOptions(bool isDark) {
+    final options = [
+      (
+        BleSimMode.auto,
+        'Otomatis (Fluktuatif Realistis)',
+        'UV 1.5–7.5 • Suhu 27–34°C • Gas VOC 45–180',
+        AppTheme.primary,
+        Icons.autorenew,
+      ),
+      (
+        BleSimMode.normal,
+        'Normal / Sejuk',
+        'UV 1.2–2.5 • Suhu 26–28°C • Gas VOC 40–85',
+        const Color(0xFF10B981),
+        Icons.wb_sunny_outlined,
+      ),
+      (
+        BleSimMode.uvExtreme,
+        'Panas Ekstrem (UV Bahaya)',
+        'UV 9.8–11.6 • Suhu 36–39°C • Gas VOC 105–155',
+        const Color(0xFFEF4444),
+        Icons.warning_amber_rounded,
+      ),
+      (
+        BleSimMode.pollution,
+        'Polusi Udara (Gas Tinggi)',
+        'UV 2.5–3.8 • Suhu 29–32°C • Gas VOC 395–475',
+        const Color(0xFFF59E0B),
+        Icons.air,
+      ),
+    ];
+
+    return options.map((opt) {
+      final (mode, title, desc, color, icon) = opt;
+      final isSelected = _ble.currentMode == mode;
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? const Color(0xFF102826) : const Color(0xFFECFDF5))
+              : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? color.withValues(alpha: 0.6) : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          leading: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white : AppTheme.textDark,
+            ),
+          ),
+          subtitle: Text(
+            desc,
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+            ),
+          ),
+          trailing: isSelected
+              ? Icon(Icons.check_circle, color: color, size: 18)
+              : null,
+          onTap: () {
+            _ble.changeMode(mode);
+            setState(() {});
+          },
+        ),
+      );
+    }).toList();
   }
 
   Widget _buildLogoutButton(bool isDark) {

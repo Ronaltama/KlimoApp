@@ -18,6 +18,8 @@ class _MapScreenState extends State<MapScreen> {
   String _selectedTab = 'UV'; // Default ke UV untuk tema utama Klimo
   List<dynamic> _heatmapData = [];
   bool _isLoading = false;
+  bool _isMapExpanded = false; // Mode perbesar peta
+  bool _isFromApi = false; // Status apakah data dari Server Cloud atau SQLite HP
 
   // Koordinat lokasi pengguna saat ini (default area Jakarta Pusat)
   double _currentUserLat = -6.200000;
@@ -57,17 +59,20 @@ class _MapScreenState extends State<MapScreen> {
 
     // 2. Ambil data sebaran spasial mikroiklim dari Backend API Laravel
     var data = await ApiService.getHeatmapData();
+    bool fromCloud = data.isNotEmpty;
 
     // 3. Fallback cerdas: jika backend offline/kosong, gunakan data historis lokal SQLite
     if (data.isEmpty) {
       final localRecords = await LocalDataService.getHistory(limit: 100);
       data = localRecords.map((r) => r.toMap()).toList();
+      fromCloud = false;
     }
 
     if (!mounted) return;
 
     setState(() {
       _heatmapData = data;
+      _isFromApi = fromCloud;
       _isLoading = false;
       _computeMetrics();
     });
@@ -230,19 +235,30 @@ class _MapScreenState extends State<MapScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Peta',
+                  'Peta Lingkungan',
                   style: TextStyle(
-                    fontSize: 24,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: isDark ? Colors.white : AppTheme.textDark,
                   ),
                 ),
-                Text(
-                  'Peta sebaran mikroiklim',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                  ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Icon(
+                      _isFromApi ? Icons.cloud_done_outlined : Icons.storage_outlined,
+                      size: 13,
+                      color: _isFromApi ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _isFromApi ? 'Data Komunitas Cloud' : 'Data Lokal HP',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -289,58 +305,138 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Widget _buildTabs(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkCard : Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(child: _buildTabItem('UV', 'Sinar UV', Icons.wb_sunny_rounded, isDark)),
+              Expanded(child: _buildTabItem('Panas', 'Suhu Panas', Icons.thermostat_rounded, isDark)),
+              Expanded(child: _buildTabItem('Udara', 'Kualitas Udara', Icons.air_rounded, isDark)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        _buildFilterExplanationBanner(isDark),
+      ],
+    );
+  }
+
+  Widget _buildTabItem(String tabKey, String label, IconData icon, bool isDark) {
+    final isActive = _selectedTab == tabKey;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedTab = tabKey;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? AppTheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isActive
+                  ? Colors.white
+                  : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive
+                    ? Colors.white
+                    : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterExplanationBanner(bool isDark) {
+    IconData icon;
+    String title;
+    String desc;
+
+    if (_selectedTab == 'UV') {
+      icon = Icons.wb_sunny_outlined;
+      title = 'Filter Sinar UV (Matahari)';
+      desc = 'Menampilkan tingkat radiasi matahari. Berguna untuk memeriksa kebutuhan tabir surya & pelindung sebelum beraktivitas di luar.';
+    } else if (_selectedTab == 'Panas') {
+      icon = Icons.thermostat_outlined;
+      title = 'Filter Suhu Panas Lingkungan';
+      desc = 'Menampilkan suhu udara mikro sekitar. Berguna untuk menghindari area panas ekstrem (> 35°C) pemicu dehidrasi.';
+    } else {
+      icon = Icons.air;
+      title = 'Filter Kualitas Udara (Gas VOC)';
+      desc = 'Menampilkan kebersihan udara & polusi gas. Berguna untuk mengetahui area mana yang udaranya kotor dan butuh masker.';
+    }
+
     return Container(
-      padding: const EdgeInsets.all(5),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(28),
+        color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
+          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: _buildTabItem('UV', isDark)),
-          Expanded(child: _buildTabItem('Panas', isDark)),
-          Expanded(child: _buildTabItem('Udara', isDark)),
+          Icon(icon, size: 16, color: AppTheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  desc,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.35,
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildTabItem(String title, bool isDark) {
-    final isActive = _selectedTab == title;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedTab = title;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: isActive ? AppTheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Center(
-          child: Text(
-            title,
-            style: TextStyle(
-              color: isActive
-                  ? Colors.white
-                  : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
-              fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
-              fontSize: 14,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildMapVisualization(bool isDark) {
-    // Generate circles dan markers dinamis dari data telemetri backend
+    // Generate circles dan markers interaktif dari data telemetri
     final circles = <CircleMarker>[];
     final markers = <Marker>[];
 
@@ -391,14 +487,47 @@ class _MapScreenState extends State<MapScreen> {
         }
       }
 
+      // Radius sebaran warna indikator
       circles.add(
         CircleMarker(
           point: LatLng(lat, lng),
-          radius: 24,
+          radius: 26,
           useRadiusInMeter: false,
           color: circleColor,
           borderColor: borderColor.withValues(alpha: 0.7),
           borderStrokeWidth: 1.5,
+        ),
+      );
+
+      // Pin marker interaktif yang dapat di-klik untuk melihat detail
+      markers.add(
+        Marker(
+          point: LatLng(lat, lng),
+          width: 30,
+          height: 30,
+          child: GestureDetector(
+            onTap: () => _showMarkerDetail(item),
+            child: Container(
+              decoration: BoxDecoration(
+                color: borderColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: borderColor.withValues(alpha: 0.55),
+                    blurRadius: 5,
+                  ),
+                ],
+              ),
+              child: Icon(
+                _selectedTab == 'UV'
+                    ? Icons.wb_sunny_rounded
+                    : (_selectedTab == 'Panas' ? Icons.thermostat_rounded : Icons.air_rounded),
+                size: 14,
+                color: Colors.white,
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -413,8 +542,8 @@ class _MapScreenState extends State<MapScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 14,
-              height: 14,
+              width: 15,
+              height: 15,
               decoration: BoxDecoration(
                 color: AppTheme.primary,
                 shape: BoxShape.circle,
@@ -440,7 +569,7 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
               child: Text(
-                'Kamu di sini',
+                'Posisi Kamu',
                 style: TextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.bold,
@@ -453,8 +582,12 @@ class _MapScreenState extends State<MapScreen> {
       ),
     );
 
-    return Container(
-      height: 290,
+    final mapHeight = _isMapExpanded ? 520.0 : 290.0;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      height: mapHeight,
       width: double.infinity,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF1F5F9),
@@ -499,13 +632,24 @@ class _MapScreenState extends State<MapScreen> {
               ],
             ),
 
-            // Kontrol Peta: Zoom & Pusat Lokasi Pengguna
+            // Tombol Kontrol Peta: Fullscreen, Zoom, dan Lokasi Saya
             Positioned(
               right: 12,
               bottom: 12,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  _buildMapControlButton(
+                    icon: _isMapExpanded ? Icons.fullscreen_exit : Icons.fullscreen,
+                    onTap: () {
+                      setState(() {
+                        _isMapExpanded = !_isMapExpanded;
+                      });
+                    },
+                    tooltip: _isMapExpanded ? 'Perkecil Peta' : 'Perbesar Peta',
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 6),
                   _buildMapControlButton(
                     icon: Icons.add,
                     onTap: () {
@@ -514,6 +658,7 @@ class _MapScreenState extends State<MapScreen> {
                         _mapController.camera.zoom + 1,
                       );
                     },
+                    tooltip: 'Perbesar Zoom',
                     isDark: isDark,
                   ),
                   const SizedBox(height: 6),
@@ -525,6 +670,7 @@ class _MapScreenState extends State<MapScreen> {
                         _mapController.camera.zoom - 1,
                       );
                     },
+                    tooltip: 'Perkecil Zoom',
                     isDark: isDark,
                   ),
                   const SizedBox(height: 6),
@@ -536,18 +682,19 @@ class _MapScreenState extends State<MapScreen> {
                         15.0,
                       );
                     },
+                    tooltip: 'Pusatkan ke Lokasi Saya',
                     isDark: isDark,
                   ),
                 ],
               ),
             ),
 
-            // Badge Info Peta Spasial
+            // Badge Info Peta & Jumlah Titik Sensor
             Positioned(
               left: 12,
               top: 12,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xDD0F172A) : const Color(0xEEFFFFFF),
                   borderRadius: BorderRadius.circular(12),
@@ -558,17 +705,59 @@ class _MapScreenState extends State<MapScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.public, size: 12, color: AppTheme.primary),
+                    const Icon(Icons.public, size: 13, color: AppTheme.primary),
                     const SizedBox(width: 5),
                     Text(
-                      'Peta Spasial Indonesia (OSM)',
+                      'Peta Spasial • ${_heatmapData.length} Titik Sensor',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                         color: isDark ? Colors.white : AppTheme.textDark,
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+
+            // Tombol Toggle Perbesar / Perkecil Cepat di Pojok Kanan Atas
+            Positioned(
+              right: 12,
+              top: 12,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isMapExpanded = !_isMapExpanded;
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xDD0F172A) : const Color(0xEEFFFFFF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppTheme.primary.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isMapExpanded ? Icons.fullscreen_exit : Icons.open_in_full,
+                        size: 13,
+                        color: AppTheme.primary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isMapExpanded ? 'Perkecil' : 'Perbesar',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -578,104 +767,392 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  void _showMarkerDetail(Map<String, dynamic> item) {
+    final uv = (item['uv_index'] as num?)?.toDouble() ?? 0.0;
+    final temp = (item['temperature'] as num?)?.toDouble() ?? 0.0;
+    final voc = (item['voc'] as num?)?.toInt() ?? 0;
+    final lat = double.tryParse(item['latitude']?.toString() ?? '') ?? 0.0;
+    final lng = double.tryParse(item['longitude']?.toString() ?? '') ?? 0.0;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkCard : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.place_outlined, color: AppTheme.primary, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Detail Titik Sensor',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : AppTheme.textDark,
+                          ),
+                        ),
+                        Text(
+                          'Koordinat: ${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: Icon(Icons.close, color: isDark ? Colors.white : AppTheme.textDark),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildDetailMetricTile(
+                      icon: Icons.wb_sunny_outlined,
+                      label: 'Sinar UV',
+                      value: uv.toStringAsFixed(1),
+                      status: uv >= 8.0 ? 'Bahaya' : (uv >= 3.0 ? 'Waspada' : 'Aman'),
+                      statusColor: uv >= 8.0
+                          ? const Color(0xFFEF4444)
+                          : (uv >= 3.0 ? const Color(0xFFF59E0B) : const Color(0xFF10B981)),
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildDetailMetricTile(
+                      icon: Icons.thermostat_outlined,
+                      label: 'Suhu',
+                      value: '${temp.toStringAsFixed(1)}°C',
+                      status: temp >= 35.0 ? 'Terik' : (temp >= 28.0 ? 'Hangat' : 'Sejuk'),
+                      statusColor: temp >= 35.0
+                          ? const Color(0xFFEF4444)
+                          : (temp >= 28.0 ? const Color(0xFFF59E0B) : const Color(0xFF10B981)),
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildDetailMetricTile(
+                      icon: Icons.air,
+                      label: 'Kualitas Udara',
+                      value: '$voc',
+                      status: voc >= 250 ? 'Bahaya' : (voc >= 100 ? 'Sedang' : 'Bersih'),
+                      statusColor: voc >= 250
+                          ? const Color(0xFFEF4444)
+                          : (voc >= 100 ? const Color(0xFFF59E0B) : const Color(0xFF10B981)),
+                      isDark: isDark,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF101B2B) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lightbulb_outline, size: 16, color: AppTheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _getRecommendationForPoint(uv, temp, voc),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.textDark,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _getRecommendationForPoint(double uv, double temp, int voc) {
+    if (uv >= 8.0) return 'Area ini terik matahari ekstrem. Disarankan berteduh dan wajib tabir surya.';
+    if (temp >= 35.0) return 'Area ini bersuhu sangat panas. Waspadai dehidrasi dan perbanyak minum air.';
+    if (voc >= 250) return 'Kadar polusi gas tinggi di area ini. Disarankan memakai masker.';
+    return 'Kondisi lingkungan di area ini relatif aman untuk beraktivitas.';
+  }
+
+  Widget _buildDetailMetricTile({
+    required IconData icon,
+    required String label,
+    required String value,
+    required String status,
+    required Color statusColor,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF101B2B) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 18, color: AppTheme.primary),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : AppTheme.textDark,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              status,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: statusColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMapControlButton({
     required IconData icon,
     required VoidCallback onTap,
+    String? tooltip,
     required bool isDark,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E293B) : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
+    return Tooltip(
+      message: tooltip ?? '',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
             ),
-          ],
-        ),
-        child: Icon(
-          icon,
-          size: 18,
-          color: isDark ? Colors.white : AppTheme.textDark,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(
+            icon,
+            size: 19,
+            color: isDark ? Colors.white : AppTheme.textDark,
+          ),
         ),
       ),
     );
   }
 
   Widget _buildLegend(bool isDark) {
-    String leftLegend;
-    String midLegend;
-    String rightLegend;
+    String safeLabel;
+    String safeRange;
+    String warnLabel;
+    String warnRange;
+    String dangerLabel;
+    String dangerRange;
 
     if (_selectedTab == 'UV') {
-      leftLegend = 'Rendah (< 3)';
-      midLegend = 'Sedang (3 - 7)';
-      rightLegend = 'Ekstrem (8+)';
+      safeLabel = 'Aman';
+      safeRange = 'Indeks < 3';
+      warnLabel = 'Waspada';
+      warnRange = 'Indeks 3 - 7';
+      dangerLabel = 'Bahaya';
+      dangerRange = 'Indeks 8+';
     } else if (_selectedTab == 'Panas') {
-      leftLegend = 'Sejuk (< 28°C)';
-      midLegend = 'Hangat (28-34°C)';
-      rightLegend = 'Terik (> 35°C)';
+      safeLabel = 'Sejuk';
+      safeRange = 'Suhu < 28°C';
+      warnLabel = 'Hangat';
+      warnRange = 'Suhu 28 - 34°C';
+      dangerLabel = 'Terik Panas';
+      dangerRange = 'Suhu ≥ 35°C';
     } else {
-      leftLegend = 'Baik (< 100)';
-      midLegend = 'Sedang (100-250)';
-      rightLegend = 'Buruk (> 250)';
+      safeLabel = 'Bersih';
+      safeRange = 'Gas < 100';
+      warnLabel = 'Sedang';
+      warnRange = 'Gas 100 - 249';
+      dangerLabel = 'Tercemar';
+      dangerRange = 'Gas ≥ 250';
     }
 
-    return Column(
-      children: [
-        Container(
-          height: 6,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(3),
-            gradient: const LinearGradient(
-              colors: [
-                Color(0xFF10B981), // Hijau
-                Color(0xFFF59E0B), // Kuning
-                Color(0xFFEF4444), // Merah
-              ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.palette_outlined, size: 16, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Makna Warna Titik Sensor:',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Klik titik di peta untuk detail',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLegendItem(
+                  color: const Color(0xFF10B981),
+                  icon: Icons.check_circle_outline,
+                  status: safeLabel,
+                  desc: safeRange,
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildLegendItem(
+                  color: const Color(0xFFF59E0B),
+                  icon: Icons.warning_amber_rounded,
+                  status: warnLabel,
+                  desc: warnRange,
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildLegendItem(
+                  color: const Color(0xFFEF4444),
+                  icon: Icons.error_outline,
+                  status: dangerLabel,
+                  desc: dangerRange,
+                  isDark: isDark,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendItem({
+    required Color color,
+    required IconData icon,
+    required String status,
+    required String desc,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.15 : 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 4),
+              Text(
+                status,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            desc,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textDark,
             ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              leftLegend,
-              style: TextStyle(
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            Text(
-              midLegend,
-              style: TextStyle(
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            Text(
-              rightLegend,
-              style: TextStyle(
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -694,11 +1171,17 @@ class _MapScreenState extends State<MapScreen> {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          _buildStatChip('Perangkatmu: Aktif', Icons.sensors, isDark),
+          _buildStatChip('Posisi Kamu: Pin Biru', Icons.my_location, isDark),
           const SizedBox(width: 10),
           _buildStatChip(
-            'Komunitas: ${_heatmapData.isNotEmpty ? _heatmapData.length : 1} Titik Data',
-            Icons.people_outline,
+            'Sumber: ${_isFromApi ? "Server Cloud" : "Lokal HP"}',
+            _isFromApi ? Icons.cloud_outlined : Icons.storage_outlined,
+            isDark,
+          ),
+          const SizedBox(width: 10),
+          _buildStatChip(
+            'Data: ${_heatmapData.isNotEmpty ? _heatmapData.length : 1} Titik Sensor',
+            Icons.pin_drop_outlined,
             isDark,
           ),
           if (_heatmapData.isNotEmpty) ...[
@@ -842,6 +1325,7 @@ class _MapScreenState extends State<MapScreen> {
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(12),
@@ -849,26 +1333,49 @@ class _MapScreenState extends State<MapScreen> {
               color: isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.location_on_outlined, color: AppTheme.primary, size: 22),
+            child: const Icon(Icons.share_location_outlined, color: AppTheme.primary, size: 22),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Bagikan lokasi anonim',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      'Bagikan Lokasi Anonim',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : AppTheme.textDark,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _shareLocation
+                            ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                            : Colors.grey.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        _shareLocation ? 'Aktif' : 'Privat',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: _shareLocation ? const Color(0xFF10B981) : Colors.grey,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Data digabung per area radius, bukan titik presisi pribadi.',
+                  'Data sensor perangkatmu dikirim tanpa identitas pribadi untuk membantu pengguna lain melihat kondisi lingkungan area ini. Jika dimatikan, kamu hanya melihat data tanpa berkontribusi.',
                   style: TextStyle(
                     fontSize: 12,
+                    height: 1.35,
                     color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
                   ),
                 ),
@@ -885,10 +1392,10 @@ class _MapScreenState extends State<MapScreen> {
                 SnackBar(
                   content: Text(
                     val
-                        ? 'Berbagi lokasi sensor anonim diaktifkan.'
+                        ? 'Berbagi lokasi sensor anonim diaktifkan. Kontribusi data aktif.'
                         : 'Berbagi lokasi dinonaktifkan (mode privat).',
                   ),
-                  duration: const Duration(milliseconds: 1500),
+                  duration: const Duration(seconds: 2),
                 ),
               );
             },
