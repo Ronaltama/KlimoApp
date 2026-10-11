@@ -167,39 +167,40 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: isDark ? AppTheme.darkCard : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.tune, color: AppTheme.primary, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Mode Simulasi BLE',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: isDark ? Colors.white : AppTheme.textDark,
+        return Material(
+          color: isDark ? AppTheme.darkCard : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.tune, color: AppTheme.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Mode Simulasi BLE',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: isDark ? Colors.white : AppTheme.textDark,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Pilih kondisi lingkungan yang disimulasikan',
-                style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
-              ),
-              const SizedBox(height: 20),
-              ..._buildModeOptions(isDark, ctx),
-              const SizedBox(height: 16),
-            ],
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Pilih kondisi lingkungan yang disimulasikan',
+                  style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                ),
+                const SizedBox(height: 20),
+                ..._buildModeOptions(isDark, ctx),
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         );
       },
@@ -240,35 +241,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return options.map((opt) {
       final (mode, title, desc, color, icon) = opt;
-      return ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
+      return Material(
+        color: Colors.transparent,
+        child: ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
           ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white : AppTheme.textDark,
+          title: Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white : AppTheme.textDark,
+            ),
           ),
-        ),
-        subtitle: Text(
-          desc,
-          style: TextStyle(
-            fontSize: 12,
-            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+          subtitle: Text(
+            desc,
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+            ),
           ),
+          onTap: () {
+            _ble.changeMode(mode);
+            Navigator.pop(ctx);
+          },
         ),
-        onTap: () {
-          _ble.changeMode(mode);
-          Navigator.pop(ctx);
-        },
       );
     }).toList();
   }

@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
@@ -7,6 +10,11 @@ import 'screens/main_screen.dart';
 import 'screens/uv_detail_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
   runApp(const MyApp());
 }
 
