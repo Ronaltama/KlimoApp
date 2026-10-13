@@ -10,12 +10,23 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  // Ukuran huruf. Sama dengan layar lain.
+  static const _fsCaption = 11.0;
+  static const _fsSmall = 12.0;
+  static const _fsBody = 13.0;
+  static const _fsTitle = 15.0;
+  static const _fsHeader = 20.0;
+
+  static const _uvColor = Color(0xFFEF4444);
+  static const _midColor = Color(0xFFF59E0B);
+  static const _goodColor = Color(0xFF10B981);
+
   bool _shareLocation = true;
   String _selectedTab = 'Sinar UV';
   List<dynamic> _heatmapData = [];
   bool _isLoading = false;
 
-  // Nilai metrik lingkungan hasil kalkulasi dari Backend API
+  // Nilai metrik lingkungan hasil kalkulasi dari API
   double _avgUv = 4.8;
   double _maxUv = 9.5;
   double _minUv = 1.2;
@@ -35,12 +46,9 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _fetchMapData() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     final data = await ApiService.getHeatmapData();
-
     if (!mounted) return;
 
     setState(() {
@@ -50,41 +58,34 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  /// Menghitung nilai statistik rata-rata, max, dan min dari titik telemetri API
+  /// Menghitung rata-rata, tertinggi, dan terendah dari data API.
   void _computeMetrics() {
     if (_heatmapData.isEmpty) return;
 
-    double totalUv = 0;
-    double totalTemp = 0;
-    int totalVoc = 0;
-    int uvCount = 0;
-    int tempCount = 0;
-    int vocCount = 0;
+    double totalUv = 0, totalTemp = 0;
+    int totalVoc = 0, uvCount = 0, tempCount = 0, vocCount = 0;
 
-    double maxUv = -1;
-    double minUv = 999;
-    double maxTemp = -1;
-    double minTemp = 999;
-    int maxVoc = -1;
-    int minVoc = 9999;
+    double maxUv = -1, minUv = 999;
+    double maxTemp = -1, minTemp = 999;
+    int maxVoc = -1, minVoc = 9999;
 
-    for (var item in _heatmapData) {
+    for (final item in _heatmapData) {
       if (item['uv_index'] != null) {
-        double val = (item['uv_index'] as num).toDouble();
+        final val = (item['uv_index'] as num).toDouble();
         totalUv += val;
         uvCount++;
         if (val > maxUv) maxUv = val;
         if (val < minUv) minUv = val;
       }
       if (item['temperature'] != null) {
-        double val = (item['temperature'] as num).toDouble();
+        final val = (item['temperature'] as num).toDouble();
         totalTemp += val;
         tempCount++;
         if (val > maxTemp) maxTemp = val;
         if (val < minTemp) minTemp = val;
       }
       if (item['voc'] != null) {
-        int val = (item['voc'] as num).toInt();
+        final val = (item['voc'] as num).toInt();
         totalVoc += val;
         vocCount++;
         if (val > maxVoc) maxVoc = val;
@@ -109,112 +110,122 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  void _notify(String message, {bool error = false}) {
+    if (!mounted) return;
+    final p = AppPalette.of(context);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: error ? p.danger : p.primary,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = AppPalette.of(context);
 
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
+      backgroundColor: p.bg,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _fetchMapData,
-          color: AppTheme.primary,
-          child: SingleChildScrollView(
+          color: p.primary,
+          child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(isDark),
-                const SizedBox(height: 20),
-                _buildTabs(isDark),
-                const SizedBox(height: 20),
-                _buildMapVisualization(isDark),
-                const SizedBox(height: 16),
-                _buildLegend(isDark),
-                const SizedBox(height: 16),
-                _buildStats(isDark),
-                const SizedBox(height: 20),
-                _buildInfoCard(isDark),
-                const SizedBox(height: 16),
-                _buildToggleCard(isDark),
-                const SizedBox(height: 24),
-              ],
-            ),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            children: [
+              _header(p),
+              const SizedBox(height: 20),
+              _tabs(p),
+              const SizedBox(height: 20),
+              _mapCard(p),
+              const SizedBox(height: 14),
+              _legend(p),
+              const SizedBox(height: 14),
+              _statChips(p),
+              const SizedBox(height: 18),
+              _infoCard(p),
+              const SizedBox(height: 14),
+              _shareCard(p),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildHeader(bool isDark) {
+  // ---------- Header ----------
+
+  Widget _header(AppPalette p) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF132D27) : const Color(0xFFD1FAE5),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.map, color: AppTheme.primary, size: 24),
-            ),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: p.primary.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.map, color: p.primary, size: 22),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
                   'Peta Lingkungan',
                   style: TextStyle(
-                    fontSize: 22,
+                    color: p.textPrimary,
+                    fontSize: _fsHeader,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
-                    letterSpacing: -0.3,
                   ),
                 ),
-                Text(
-                  'Kondisi cuaca di sekitar kamu',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+              Text(
+                'Kondisi di sekitar kamu',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: p.textSecondary, fontSize: _fsSmall),
+              ),
+            ],
+          ),
         ),
-        // Tombol Refresh / Sinkronisasi Cepat
+        const SizedBox(width: 8),
         InkWell(
           onTap: _isLoading ? null : _fetchMapData,
           borderRadius: BorderRadius.circular(20),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isDark ? AppTheme.darkCard : Colors.white,
+              color: p.card,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
-              ),
+              border: Border.all(color: p.cardBorder),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _isLoading
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 14,
                         height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: p.primary),
                       )
-                    : const Icon(Icons.refresh, size: 16, color: AppTheme.primary),
+                    : Icon(Icons.refresh, size: 16, color: p.primary),
                 const SizedBox(width: 6),
                 Text(
                   'Perbarui',
                   style: TextStyle(
-                    fontSize: 12,
+                    color: p.textPrimary,
+                    fontSize: _fsSmall,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
                   ),
                 ),
               ],
@@ -225,50 +236,46 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildTabs(bool isDark) {
+  // ---------- Tab ----------
+
+  Widget _tabs(AppPalette p) {
     return Container(
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : Colors.white,
+        color: p.card,
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
-        ),
+        border: Border.all(color: p.cardBorder),
       ),
       child: Row(
         children: [
-          Expanded(child: _buildTabItem('Sinar UV', isDark)),
-          Expanded(child: _buildTabItem('Suhu', isDark)),
-          Expanded(child: _buildTabItem('Udara', isDark)),
+          Expanded(child: _tabItem(p, 'Sinar UV')),
+          Expanded(child: _tabItem(p, 'Suhu')),
+          Expanded(child: _tabItem(p, 'Udara')),
         ],
       ),
     );
   }
 
-  Widget _buildTabItem(String title, bool isDark) {
+  Widget _tabItem(AppPalette p, String title) {
     final isActive = _selectedTab == title;
 
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedTab = title;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+      onTap: () => setState(() => _selectedTab = title),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 11),
         decoration: BoxDecoration(
-          color: isActive ? AppTheme.primary : Colors.transparent,
+          color: isActive ? p.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(24),
         ),
-        child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
           child: Text(
             title,
             style: TextStyle(
-              color: isActive
-                  ? Colors.white
-                  : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+              color: isActive ? Colors.white : p.textSecondary,
               fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
-              fontSize: 13,
+              fontSize: _fsBody,
             ),
           ),
         ),
@@ -276,247 +283,177 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildMapVisualization(bool isDark) {
-    // Label badge zona: nama kondisi + nilai di baris kedua
-    String highZoneLabel, highZoneValue;
-    String midZoneLabel, midZoneValue;
-    String lowZoneLabel, lowZoneValue;
+  // ---------- Peta ----------
 
-    if (_selectedTab == 'Sinar UV') {
-      highZoneLabel = 'Sangat Terik';
-      highZoneValue = 'UV ${_maxUv.toStringAsFixed(1)}';
-      midZoneLabel = 'Sedang';
-      midZoneValue = 'UV ${_avgUv.toStringAsFixed(1)}';
-      lowZoneLabel = 'Teduh';
-      lowZoneValue = 'UV ${_minUv.toStringAsFixed(1)}';
-    } else if (_selectedTab == 'Suhu') {
-      highZoneLabel = 'Panas Sekali';
-      highZoneValue = '${_maxTemp.toStringAsFixed(1)}°C';
-      midZoneLabel = 'Hangat';
-      midZoneValue = '${_avgTemp.toStringAsFixed(1)}°C';
-      lowZoneLabel = 'Sejuk';
-      lowZoneValue = '${_minTemp.toStringAsFixed(1)}°C';
-    } else {
-      highZoneLabel = 'Udara Buruk';
-      highZoneValue = 'VOC $_maxVoc';
-      midZoneLabel = 'Cukup Baik';
-      midZoneValue = 'VOC $_avgVoc';
-      lowZoneLabel = 'Udara Segar';
-      lowZoneValue = 'VOC $_minVoc';
-    }
+  Widget _mapCard(AppPalette p) {
+    final labels = _zoneLabels();
 
-    return Container(
-      height: 250,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
-          width: 1.5,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: Stack(
-          children: [
-            // Grid latar belakang peta subtle
-            Positioned.fill(
-              child: Opacity(
-                opacity: isDark ? 0.08 : 0.04,
-                child: CustomPaint(
-                  painter: _MapGridPainter(isDark: isDark),
-                ),
-              ),
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final h = (w * 0.65).clamp(200.0, 280.0);
+        final blob = w * 0.42;
 
-            // Blob 1: Zona Bahaya / Tinggi (Merah)
-            Positioned(
-              left: 20,
-              top: 20,
-              child: Container(
-                width: 150,
-                height: 150,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFFEF4444).withValues(alpha: isDark ? 0.35 : 0.25),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Blob 2: Zona Sedang (Kuning/Oranye)
-            Positioned(
-              right: 10,
-              top: 50,
-              child: Container(
-                width: 170,
-                height: 170,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.35 : 0.25),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Blob 3: Zona Aman / Baik (Hijau)
-            Positioned(
-              left: 50,
-              bottom: 10,
-              child: Container(
-                width: 140,
-                height: 140,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFF10B981).withValues(alpha: isDark ? 0.35 : 0.25),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Badge Zona Tinggi (Atas Kiri)
-            Positioned(
-              top: 28,
-              left: 28,
-              child: _buildMapLabel(
-                highZoneLabel,
-                highZoneValue,
-                isDark ? const Color(0xFF2E1720) : const Color(0xFFFEE2E2),
-                const Color(0xFFF87171),
-                isDark,
-              ),
-            ),
-
-            // Badge Zona Sedang (Kanan)
-            Positioned(
-              right: 22,
-              top: 90,
-              child: _buildMapLabel(
-                midZoneLabel,
-                midZoneValue,
-                isDark ? const Color(0xFF2D2517) : const Color(0xFFFEF3C7),
-                const Color(0xFFFBBF24),
-                isDark,
-              ),
-            ),
-
-            // Badge Zona Aman (Bawah Kiri)
-            Positioned(
-              bottom: 30,
-              left: 55,
-              child: _buildMapLabel(
-                lowZoneLabel,
-                lowZoneValue,
-                isDark ? const Color(0xFF132D27) : const Color(0xFFD1FAE5),
-                const Color(0xFF34D399),
-                isDark,
-              ),
-            ),
-
-            // Pin Lokasi Pengguna (Tengah)
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 16,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.primary.withValues(alpha: 0.5),
-                          blurRadius: 10,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.black87 : Colors.white70,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Kamu di sini',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : AppTheme.textDark,
+        return Container(
+          height: h,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: p.cardBorder, width: 1.2),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(23),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: p.bg == AppPalette.dark.bg ? 0.08 : 0.04,
+                    child: CustomPaint(
+                      painter: _MapGridPainter(
+                        color: p.textPrimary,
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+                _blob(_uvColor, p, blob, left: -blob * 0.1, top: -blob * 0.1),
+                _blob(_midColor, p, blob * 1.1, right: -blob * 0.1, top: h * 0.2),
+                _blob(_goodColor, p, blob * 0.9, left: w * 0.15, bottom: -blob * 0.1),
+
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  right: w * 0.45,
+                  child: _zoneBadge(p, labels[0], _uvColor),
+                ),
+                Positioned(
+                  right: 12,
+                  top: h * 0.4,
+                  child: _zoneBadge(p, labels[1], _midColor),
+                ),
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  right: w * 0.4,
+                  child: _zoneBadge(p, labels[2], _goodColor),
+                ),
+
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: p.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      FittedBox(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: p.card,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Kamu di sini',
+                            style: TextStyle(
+                              color: p.textPrimary,
+                              fontSize: _fsCaption,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Label zona (judul, nilai) sesuai tab yang dipilih.
+  List<(String, String)> _zoneLabels() {
+    if (_selectedTab == 'Sinar UV') {
+      return [
+        ('Sangat terik', 'UV ${_maxUv.toStringAsFixed(1)}'),
+        ('Sedang', 'UV ${_avgUv.toStringAsFixed(1)}'),
+        ('Teduh', 'UV ${_minUv.toStringAsFixed(1)}'),
+      ];
+    } else if (_selectedTab == 'Suhu') {
+      return [
+        ('Panas sekali', '${_maxTemp.toStringAsFixed(1)}°C'),
+        ('Hangat', '${_avgTemp.toStringAsFixed(1)}°C'),
+        ('Sejuk', '${_minTemp.toStringAsFixed(1)}°C'),
+      ];
+    }
+    return [
+      ('Udara buruk', 'Indeks $_maxVoc'),
+      ('Cukup baik', 'Indeks $_avgVoc'),
+      ('Udara segar', 'Indeks $_minVoc'),
+    ];
+  }
+
+  Widget _blob(
+    Color color,
+    AppPalette p,
+    double size, {
+    double? left,
+    double? right,
+    double? top,
+    double? bottom,
+  }) {
+    return Positioned(
+      left: left,
+      right: right,
+      top: top,
+      bottom: bottom,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              color.withValues(alpha: 0.25),
+              color.withValues(alpha: 0),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildMapLabel(
-    String label,
-    String value,
-    Color bgColor,
-    Color accentColor,
-    bool isDark,
-  ) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 250),
-      child: Container(
-        key: ValueKey('$label-$value'),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: accentColor.withValues(alpha: 0.3)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
+  Widget _zoneBadge(AppPalette p, (String, String) text, Color accent) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: p.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.4)),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              label,
-              style: TextStyle(
-                color: accentColor,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                height: 1.1,
-              ),
+              text.$1,
+              style: TextStyle(color: accent, fontSize: _fsSmall, fontWeight: FontWeight.bold),
             ),
             Text(
-              value,
-              style: TextStyle(
-                color: accentColor.withValues(alpha: 0.75),
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                height: 1.2,
-              ),
+              text.$2,
+              style: TextStyle(color: p.textSecondary, fontSize: _fsCaption),
             ),
           ],
         ),
@@ -524,68 +461,49 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildLegend(bool isDark) {
-    String leftLegend;
-    String midLegend;
-    String rightLegend;
+  // ---------- Skala warna ----------
 
-    if (_selectedTab == 'UV') {
-      leftLegend = 'Rendah (< 3)';
-      midLegend = 'Sedang (3 - 7)';
-      rightLegend = 'Ekstrem (8+)';
-    } else if (_selectedTab == 'Panas') {
-      leftLegend = 'Sejuk (< 28°C)';
-      midLegend = 'Hangat (28-34°C)';
-      rightLegend = 'Terik (> 35°C)';
+  Widget _legend(AppPalette p) {
+    final List<String> items;
+    if (_selectedTab == 'Sinar UV') {
+      items = ['Rendah (< 3)', 'Sedang (3–7)', 'Tinggi (8+)'];
+    } else if (_selectedTab == 'Suhu') {
+      items = ['Sejuk (< 28°C)', 'Hangat (28–34°C)', 'Panas (> 35°C)'];
     } else {
-      leftLegend = 'Baik (< 100)';
-      midLegend = 'Sedang (100-250)';
-      rightLegend = 'Buruk (> 250)';
+      items = ['Baik (< 100)', 'Sedang (100–250)', 'Buruk (> 250)'];
     }
+
+    const colors = [_goodColor, _midColor, _uvColor];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Label atas
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Text(
-            'Skala warna',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-              letterSpacing: 0.3,
-            ),
-          ),
+        Text(
+          'Skala warna',
+          style: TextStyle(color: p.textMuted, fontSize: _fsCaption, fontWeight: FontWeight.w600),
         ),
+        const SizedBox(height: 6),
         Container(
           height: 8,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4),
-            gradient: const LinearGradient(
-              colors: [
-                Color(0xFF10B981), // Hijau - aman
-                Color(0xFFF59E0B), // Kuning - sedang
-                Color(0xFFEF4444), // Merah - bahaya
-              ],
-            ),
+            gradient: const LinearGradient(colors: colors),
           ),
         ),
         const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _legendLabel(leftLegend, const Color(0xFF10B981), isDark),
-            _legendLabel(midLegend, const Color(0xFFF59E0B), isDark),
-            _legendLabel(rightLegend, const Color(0xFFEF4444), isDark),
-          ],
+        Wrap(
+          spacing: 12,
+          runSpacing: 6,
+          children: List.generate(
+            3,
+            (i) => _legendItem(p, items[i], colors[i]),
+          ),
         ),
       ],
     );
   }
 
-  Widget _legendLabel(String text, Color dotColor, bool isDark) {
+  Widget _legendItem(AppPalette p, String text, Color dotColor) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -597,48 +515,49 @@ class _MapScreenState extends State<MapScreen> {
         const SizedBox(width: 4),
         Text(
           text,
-          style: TextStyle(
-            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
+          style: TextStyle(color: p.textSecondary, fontSize: _fsCaption, fontWeight: FontWeight.w500),
         ),
       ],
     );
   }
 
-  Widget _buildStats(bool isDark) {
+  // ---------- Statistik ----------
+
+  Widget _statChips(AppPalette p) {
     final communityCount = _heatmapData.isNotEmpty ? _heatmapData.length : 1;
-    return Row(
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
       children: [
-        _buildStatChip('Perangkatmu: Aktif', Icons.sensors, isDark),
-        const SizedBox(width: 10),
-        _buildStatChip('$communityCount pengguna di sekitar', Icons.people_outline, isDark),
+        _chip(p, 'Perangkatmu: Aktif', Icons.sensors),
+        _chip(p, '$communityCount orang di sekitar', Icons.people_outline),
       ],
     );
   }
 
-  Widget _buildStatChip(String text, IconData icon, bool isDark) {
+  Widget _chip(AppPalette p, String text, IconData icon) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : Colors.white,
+        color: p.card,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
-        ),
+        border: Border.all(color: p.cardBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppTheme.primary),
+          Icon(icon, size: 14, color: p.primary),
           const SizedBox(width: 6),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              text,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: p.textSecondary,
+                fontSize: _fsSmall,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -646,149 +565,119 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildInfoCard(bool isDark) {
-    // ── Konten tergantung tab ──
-    String headline;      // Satu kalimat singkat, mudah dipahami
-    String explanation;   // Penjelasan & saran praktis
-    String badgeLabel;    // Status singkat di badge
-    Color badgeColor;
-    Color iconColor;
+  // ---------- Info ----------
+
+  Widget _infoCard(AppPalette p) {
+    String headline;
+    String explanation;
+    String badgeLabel;
+    Color color;
     IconData icon;
 
     if (_selectedTab == 'Sinar UV') {
       icon = Icons.wb_sunny_outlined;
       if (_avgUv >= 8) {
         badgeLabel = 'Berbahaya';
-        badgeColor = const Color(0xFFEF4444);
-        iconColor = const Color(0xFFEF4444);
-        headline = 'Sinar matahari sangat kuat saat ini!';
-        explanation = 'Paparan sinar UV sangat tinggi. Sebaiknya pakai sunscreen, topi, atau hindari keluar antara pukul 10–14.';
+        color = _uvColor;
+        headline = 'Sinar matahari sangat kuat sekarang';
+        explanation = 'Pakai sunscreen dan topi. Hindari keluar antara pukul 10 sampai 14.';
       } else if (_avgUv >= 3) {
         badgeLabel = 'Sedang';
-        badgeColor = const Color(0xFFF59E0B);
-        iconColor = const Color(0xFFF59E0B);
-        headline = 'Sinar UV sedang — tetap waspada';
-        explanation = 'Masih aman beraktivitas di luar, tapi disarankan pakai sunscreen. Area teduh terdekat sekitar 120 m.';
+        color = _midColor;
+        headline = 'Sinar UV sedang, tetap waspada';
+        explanation = 'Masih aman di luar, tapi disarankan pakai sunscreen.';
       } else {
         badgeLabel = 'Aman';
-        badgeColor = AppTheme.primary;
-        iconColor = AppTheme.primary;
-        headline = 'Sinar UV rendah — aman untuk keluar';
-        explanation = 'Kondisi aman untuk aktivitas di luar ruangan. Tidak perlu khawatir dengan paparan matahari.';
+        color = p.primary;
+        headline = 'Sinar UV rendah, aman untuk keluar';
+        explanation = 'Tidak perlu khawatir dengan paparan matahari sekarang.';
       }
     } else if (_selectedTab == 'Suhu') {
       icon = Icons.thermostat_outlined;
       if (_avgTemp >= 35) {
-        badgeLabel = 'Sangat Panas';
-        badgeColor = const Color(0xFFEF4444);
-        iconColor = const Color(0xFFEF4444);
-        headline = 'Cuaca sangat panas sekarang!';
-        explanation = 'Suhu terasa menyengat. Perbanyak minum air, hindari aktivitas berat di luar, dan cari tempat teduh.';
+        badgeLabel = 'Sangat panas';
+        color = _uvColor;
+        headline = 'Cuaca sangat panas sekarang';
+        explanation = 'Perbanyak minum air dan cari tempat teduh.';
       } else if (_avgTemp >= 28) {
         badgeLabel = 'Hangat';
-        badgeColor = const Color(0xFFF59E0B);
-        iconColor = const Color(0xFFF59E0B);
-        headline = 'Suhu hangat — cukup nyaman';
-        explanation = 'Cuaca cukup bersahabat. Tetap terhidrasi jika beraktivitas di luar dalam waktu lama.';
+        color = _midColor;
+        headline = 'Suhu hangat, cukup nyaman';
+        explanation = 'Tetap minum air jika beraktivitas di luar lama.';
       } else {
         badgeLabel = 'Sejuk';
-        badgeColor = AppTheme.primary;
-        iconColor = AppTheme.primary;
-        headline = 'Suhu sejuk — cuaca sangat nyaman';
-        explanation = 'Kondisi ideal untuk berjalan-jalan atau olahraga di luar ruangan.';
+        color = p.primary;
+        headline = 'Suhu sejuk, cuaca nyaman';
+        explanation = 'Cocok untuk jalan-jalan atau olahraga di luar.';
       }
     } else {
-      // Udara (VOC)
       icon = Icons.air;
       if (_avgVoc >= 250) {
-        badgeLabel = 'Udara Buruk';
-        badgeColor = const Color(0xFFEF4444);
-        iconColor = const Color(0xFFEF4444);
-        headline = 'Kualitas udara kurang baik!';
-        explanation = 'Udara mengandung banyak zat kimia (asap, polusi). Sebaiknya pakai masker saat keluar rumah.';
+        badgeLabel = 'Udara buruk';
+        color = _uvColor;
+        headline = 'Kualitas udara kurang baik';
+        explanation = 'Pakai masker saat keluar rumah.';
       } else if (_avgVoc >= 100) {
-        badgeLabel = 'Cukup Baik';
-        badgeColor = const Color(0xFFF59E0B);
-        iconColor = const Color(0xFFF59E0B);
+        badgeLabel = 'Cukup baik';
+        color = _midColor;
         headline = 'Kualitas udara cukup baik';
-        explanation = 'Udara masih aman untuk aktivitas normal, tapi pastikan sirkulasi ruangan tetap terbuka.';
+        explanation = 'Pastikan sirkulasi udara di ruangan tetap lancar.';
       } else {
-        badgeLabel = 'Udara Segar';
-        badgeColor = AppTheme.primary;
-        iconColor = AppTheme.primary;
-        headline = 'Udara segar — kondisi terbaik';
-        explanation = 'Kualitas udara sangat baik. Bagus untuk olahraga, jalan santai, atau membuka jendela rumah.';
+        badgeLabel = 'Udara segar';
+        color = p.primary;
+        headline = 'Udara segar, kondisi terbaik';
+        explanation = 'Bagus untuk olahraga atau membuka jendela rumah.';
       }
     }
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
-        ),
-        boxShadow: isDark
-            ? null
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
+    return AppCard(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: isDark ? 0.2 : 0.12),
+              color: color.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: iconColor, size: 24),
+            child: Icon(icon, color: color, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Badge status
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                   decoration: BoxDecoration(
-                    color: badgeColor.withValues(alpha: 0.12),
+                    color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
                     badgeLabel,
                     style: TextStyle(
-                      color: badgeColor,
-                      fontSize: 11,
+                      color: color,
+                      fontSize: _fsCaption,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
                 const SizedBox(height: 6),
-                // Judul utama — besar & tegas
                 Text(
                   headline,
                   style: TextStyle(
-                    fontSize: 15,
+                    color: p.textPrimary,
+                    fontSize: _fsTitle,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
                     height: 1.3,
                   ),
                 ),
                 const SizedBox(height: 5),
-                // Penjelasan — ringan & ramah
                 Text(
                   explanation,
                   style: TextStyle(
-                    fontSize: 13,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                    color: p.textSecondary,
+                    fontSize: _fsBody,
                     height: 1.45,
                   ),
                 ),
@@ -800,34 +689,19 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildToggleCard(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
-        ),
-        boxShadow: isDark
-            ? null
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
+  // ---------- Kontribusi ----------
+
+  Widget _shareCard(AppPalette p) {
+    return AppCard(
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5),
+              color: p.primary.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.location_on_outlined, color: AppTheme.primary, size: 22),
+            child: Icon(Icons.location_on_outlined, color: p.primary, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -837,19 +711,15 @@ class _MapScreenState extends State<MapScreen> {
                 Text(
                   'Ikut berkontribusi ke peta',
                   style: TextStyle(
-                    fontSize: 14,
+                    color: p.textPrimary,
+                    fontSize: _fsTitle,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'Lokasimu tidak disimpan secara pribadi — hanya dipakai untuk peta komunitas.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                    height: 1.4,
-                  ),
+                  'Lokasimu tidak disimpan secara pribadi.',
+                  style: TextStyle(color: p.textSecondary, fontSize: _fsSmall, height: 1.4),
                 ),
               ],
             ),
@@ -857,23 +727,16 @@ class _MapScreenState extends State<MapScreen> {
           const SizedBox(width: 8),
           Switch(
             value: _shareLocation,
+            activeThumbColor: Colors.white,
+            activeTrackColor: p.primary,
             onChanged: (val) {
-              setState(() {
-                _shareLocation = val;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    val
-                        ? 'Kamu sekarang ikut berkontribusi ke peta komunitas!'
-                        : 'Kontribusi peta dimatikan.',
-                  ),
-                  duration: const Duration(milliseconds: 1800),
-                ),
+              setState(() => _shareLocation = val);
+              _notify(
+                val
+                    ? 'Kamu ikut berkontribusi ke peta komunitas.'
+                    : 'Kontribusi peta dimatikan.',
               );
             },
-            activeThumbColor: Colors.white,
-            activeTrackColor: AppTheme.primary,
           ),
         ],
       ),
@@ -881,15 +744,15 @@ class _MapScreenState extends State<MapScreen> {
   }
 }
 
-/// Custom painter sederhana untuk menggambar aksen grid peta
+/// Garis grid tipis sebagai latar peta.
 class _MapGridPainter extends CustomPainter {
-  final bool isDark;
-  _MapGridPainter({required this.isDark});
+  final Color color;
+  _MapGridPainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = isDark ? Colors.white : Colors.black
+      ..color = color
       ..strokeWidth = 1;
 
     const step = 40.0;
@@ -902,5 +765,5 @@ class _MapGridPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _MapGridPainter old) => old.color != color;
 }
