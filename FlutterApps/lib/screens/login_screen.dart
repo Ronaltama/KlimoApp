@@ -54,6 +54,10 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     if (result['success']) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('demo_system_mode', false);
+      BleSimulatorService().stop();
+
       final isSetupDone = await ApiService.isOnboardingCompleted();
       if (!mounted) return;
       if (isSetupDone) {
@@ -80,6 +84,47 @@ class _LoginScreenState extends State<LoginScreen> {
               }
             },
           ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isLoading = true);
+
+    final result = await ApiService.loginWithGoogle();
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result['success']) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('demo_system_mode', false);
+      BleSimulatorService().stop();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Berhasil masuk via Google ke backend asli!'),
+          backgroundColor: Color(0xFF00A86B),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      final isSetupDone = await ApiService.isOnboardingCompleted();
+      if (!mounted) return;
+      if (isSetupDone) {
+        Navigator.pushReplacementNamed(context, '/main');
+      } else {
+        Navigator.pushReplacementNamed(context, '/pairing');
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Login Google gagal. Pastikan backend aktif.'),
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -263,6 +308,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             if (!context.mounted) return;
                             if (res['success']) {
+                              final prefs = await SharedPreferences.getInstance();
+                              await prefs.setBool('demo_system_mode', false);
+                              BleSimulatorService().stop();
+
+                              if (!context.mounted) return;
                               Navigator.pop(dialogCtx);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
@@ -523,7 +573,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         // Tombol 'Lanjut dengan Google'
                         InkWell(
-                          onTap: _enterDirectDemoMode,
+                          onTap: _handleGoogleSignIn,
                           borderRadius: BorderRadius.circular(12),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8),

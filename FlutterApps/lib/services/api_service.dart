@@ -90,6 +90,20 @@ class ApiService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_skin_type', type);
+
+      // Sinkronkan ke profil backend jika user sedang login
+      final token = await getToken();
+      if (token != null && token.isNotEmpty) {
+        final baseUrl = await getBaseUrl();
+        await http.put(
+          Uri.parse('$baseUrl/profile'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({'skin_type': type}),
+        ).timeout(const Duration(seconds: 3));
+      }
     } catch (_) {}
   }
 
@@ -104,10 +118,27 @@ class ApiService {
   }
 
   /// Menyimpan nama perangkat yang terhubung
-  static Future<void> saveConnectedDevice(String deviceName) async {
+  static Future<void> saveConnectedDevice(String deviceName, {String? macAddress}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('connected_device', deviceName);
+
+      // Daftarkan perangkat ke backend jika user sedang login
+      final token = await getToken();
+      if (token != null && token.isNotEmpty) {
+        final baseUrl = await getBaseUrl();
+        await http.post(
+          Uri.parse('$baseUrl/devices'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'mac_address': macAddress ?? 'KLIMO-${deviceName.replaceAll(' ', '-').toUpperCase()}',
+            'name': deviceName,
+          }),
+        ).timeout(const Duration(seconds: 3));
+      }
     } catch (_) {}
   }
 
@@ -139,19 +170,33 @@ class ApiService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setInt('user_id', data['data']['user']['id'] as int);
         }
+        if (data['data']?['user']?['skin_type'] != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_skin_type', data['data']['user']['skin_type'].toString());
+        }
         return {'success': true, 'data': data};
       } else {
-        return {'success': false, 'message': 'Email atau password salah'};
+        String msg = 'Email atau kata sandi tidak cocok';
+        try {
+          final data = jsonDecode(response.body);
+          if (data['message'] != null) {
+            msg = data['message'];
+          } else if (data['errors'] != null) {
+            msg = data['errors'].values.first[0];
+          }
+        } catch (_) {}
+        return {'success': false, 'message': msg};
       }
     } catch (e) {
-      return {'success': false, 'message': 'Gagal konek ke Backend ($e)'};
+      return {'success': false, 'message': 'Gagal terhubung ke Backend ($e)'};
     }
   }
 
   // Fungsi Registrasi Akun Baru
-  static Future<Map<String, dynamic>> register(String name, String email, String password) async {
+  static Future<Map<String, dynamic>> register(String name, String email, String password, {String? skinType}) async {
     try {
       final baseUrl = await getBaseUrl();
+      final currentSkin = skinType ?? await getSkinType();
       final response = await http.post(
         Uri.parse('$baseUrl/register'),
         headers: {'Content-Type': 'application/json'},
@@ -159,6 +204,7 @@ class ApiService {
           'name': name,
           'email': email,
           'password': password,
+          'skin_type': currentSkin,
         }),
       ).timeout(const Duration(seconds: 5));
 
@@ -172,6 +218,10 @@ class ApiService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setInt('user_id', data['data']['user']['id'] as int);
         }
+        if (data['data']?['user']?['skin_type'] != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_skin_type', data['data']['user']['skin_type'].toString());
+        }
         return {'success': true, 'data': data};
       } else {
         final data = jsonDecode(response.body);
@@ -184,8 +234,53 @@ class ApiService {
         return {'success': false, 'message': msg};
       }
     } catch (e) {
-      return {'success': false, 'message': 'Gagal konek ke Backend ($e)'};
+      return {'success': false, 'message': 'Gagal terhubung ke Backend ($e)'};
     }
+  }
+
+  // Fungsi Login Akun Google via Backend Asli
+  static Future<Map<String, dynamic>> loginWithGoogle() async {
+    const googleEmail = 'google.user@klimo.app';
+    const googlePass = 'google_klimo_oauth_pass';
+    const googleName = 'Pengguna Google';
+
+    try {
+      final baseUrl = await getBaseUrl();
+      final response = await http.post(
+        Uri.parse('$baseUrl/login/google'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': googleEmail,
+          'name': googleName,
+        }),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        final token = data['token'] ?? data['data']?['token'] ?? '';
+        if (token.isNotEmpty) {
+          await saveToken(token);
+        }
+        if (data['data']?['user']?['id'] != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt('user_id', data['data']['user']['id'] as int);
+        }
+        if (data['data']?['user']?['skin_type'] != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_skin_type', data['data']['user']['skin_type'].toString());
+        }
+        return {'success': true, 'data': data};
+      }
+    } catch (_) {}
+
+    // Fallback jika backend belum merestart rute baru
+    final loginRes = await login(googleEmail, googlePass);
+    if (loginRes['success']) {
+      return loginRes;
+    }
+
+    final regRes = await register(googleName, googleEmail, googlePass);
+    return regRes;
   }
 
   // Fungsi Ambil Data Sensor Terbaru (Simulasi IoT / Backend)
@@ -266,7 +361,12 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['data'];
+        final profile = data['data'];
+        if (profile != null && profile['skin_type'] != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_skin_type', profile['skin_type'].toString());
+        }
+        return profile;
       }
     } catch (_) {}
     return null;
@@ -294,21 +394,30 @@ class ApiService {
   }
 
   // Fungsi Update Profil Pengguna
-  static Future<Map<String, dynamic>> updateProfile(String name) async {
+  static Future<Map<String, dynamic>> updateProfile(String name, {String? skinType}) async {
     try {
       final baseUrl = await getBaseUrl();
       final token = await getToken();
+      final payload = <String, dynamic>{'name': name};
+      if (skinType != null) {
+        payload['skin_type'] = skinType;
+      }
+
       final response = await http.put(
         Uri.parse('$baseUrl/profile'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({'name': name}),
+        body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        if (skinType != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_skin_type', skinType);
+        }
         return {'success': true, 'data': data['data']};
       }
     } catch (_) {}

@@ -16,12 +16,14 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:6',
+            'skin_type' => 'nullable|string|max:50',
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
+            'skin_type' => $validated['skin_type'] ?? 'Tipe IV',
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -63,6 +65,34 @@ class AuthController extends Controller
         ]);
     }
 
+    public function googleLogin(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'name' => 'nullable|string',
+        ]);
+
+        $user = User::firstOrCreate(
+            ['email' => $request->email],
+            [
+                'name' => $request->name ?? 'Pengguna Google',
+                'password' => Hash::make(str()->random(32)),
+                'skin_type' => 'Tipe IV',
+            ]
+        );
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Login Google berhasil',
+            'data' => [
+                'user' => $user,
+                'token' => $token,
+            ],
+        ]);
+    }
+
     public function profile(Request $request)
     {
         return response()->json([
@@ -74,11 +104,17 @@ class AuthController extends Controller
     public function updateProfile(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => 'nullable|string|max:255',
+            'skin_type' => 'nullable|string|max:50',
         ]);
 
         $user = $request->user();
-        $user->name = $validated['name'];
+        if (!empty($validated['name'])) {
+            $user->name = $validated['name'];
+        }
+        if (!empty($validated['skin_type'])) {
+            $user->skin_type = $validated['skin_type'];
+        }
         $user->save();
 
         return response()->json([

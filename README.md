@@ -1,46 +1,65 @@
 # KlimoApp (Klimo Wearth) 🌦️
 
-Repository monorepo untuk proyek **Klimo Wearth** (Personal Weather & Wearable Microclimate Monitoring).
+[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
+[![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20?logo=laravel&logoColor=white)](https://laravel.com)
+[![ESP32-C3](https://img.shields.io/badge/Hardware-ESP32--C3-E7352C?logo=espressif&logoColor=white)](https://www.espressif.com)
+[![PlatformIO](https://img.shields.io/badge/PlatformIO-Core-orange?logo=platformio&logoColor=white)](https://platformio.org)
+[![Offline--First](https://img.shields.io/badge/Architecture-Offline--First-success)](https://flutter.dev)
 
-Repository ini terdiri dari 3 direktori utama:
-1. `Backend/` — REST API Backend berbasis **Laravel 13** & Laravel Sanctum.
-2. `IoT_Simulator/` — Simulator Sensor Python & Firmware **ESP32-C3** (PlatformIO).
-3. `FlutterApps/` — Aplikasi mobile & desktop Flutter (UI Monitoring & Dashboard).
+Monorepo resmi untuk proyek **Klimo Wearth** (*Personal Weather & Wearable Microclimate Monitoring*), sebuah ekosistem pemantauan iklim mikro pribadi dan perlindungan kesehatan kulit pekerja luar ruangan (*outdoor workers*) secara *real-time*.
 
 ---
 
 ## 💡 Tentang Solusi: Klimo Wearth
 
-**Klimo Wearth** (*Personal Weather & Wearable Microclimate Monitoring*) adalah solusi pemantauan iklim mikro dan perlindungan pekerja luar ruangan (*outdoor workers*) secara *real-time*. 
+Pekerja lapangan, kurir, atlet, dan masyarakat urban sering kali terpapar bahaya radiasi sinar UV ekstrem, suhu panas menyengat (*heat exhaustion*), serta akumulasi polusi gas beracun tanpa alat ukur objektif di tubuh mereka. 
 
-Solusi ini mengintegrasikan perangkat *wearable* IoT dengan aplikasi *mobile* berarsitektur *offline-first* dan *backend cloud* untuk memantau:
-* **Indeks Paparan Radiasi UV** (dengan indikator visual tingkat risiko & saran proteksi).
-* **Suhu & Kelembaban** (deteksi dini risiko *Heat Stress* / kelelahan panas).
-* **Kualitas Udara & Indeks Gas VOC** (pemantauan polusi udara mikro).
-* **Peta Sebaran Komunitas (*Community Heatmap*)** untuk memetakan kondisi iklim mikro sekitar berdasarkan data gabungan pengguna.
+**Klimo Wearth** menjawab tantangan ini dengan menggabungkan:
+1. **Perangkat Wearable IoT (ESP32-C3)** yang mengukur kondisi mikro langsung di atmosfer sekitar tubuh.
+2. **Aplikasi Mobile (Flutter)** berarsitektur *Offline-First* (mirip arsitektur *Huawei Health* / *Garmin Connect*) dengan penyimpanan lokal SQLite berkecepatan tinggi dan sinkronisasi cerdas ke cloud.
+3. **Backend Cloud (Laravel 13 REST API)** dengan validasi data, *Sanctum authentication*, serta *Delta Threshold Filtering* untuk efisiensi basis data.
+
+---
+
+## ✨ Fitur-Fitur Utama
+
+* **☀️ Pemantauan Sinar UV Real-Time**: Deteksi indeks UV dengan indikator risiko dinamis (Aman, Waspada, Bahaya) dan panduan proteksi kulit.
+* **🧴 Personalisasi Tipe Kulit (Tipe I – VI)**: Menyesuaikan batas aman paparan sinar matahari dan rekomendasi sunscreen berdasarkan klasifikasi kulit *Fitzpatrick Scale*.
+* **🌡️ Deteksi Suhu Panas & Heat Stress**: Memantau suhu lingkungan dan memperingatkan pengguna saat kondisi mendekati batas bahaya dehidrasi.
+* **💨 Pemantauan Kualitas Udara (Gas VOC)**: Mengukur konsentrasi senyawa organik volatil di sekitar tubuh pengguna.
+* **🗺️ Peta Iklim Kawasan Berorientasi Privasi (*Privacy-Preserving Area Heatmap*)**:
+  * Menggunakan **Spatial Grid Aggregation (~150 meter)** untuk menampilkan rata-rata kondisi lingkungan wilayah makro.
+  * **Privasi Terjamin**: Tidak melacak atau menampilkan titik GPS presisi pengguna lain, melainkan menghadirkan ringkasan iklim kawasan sekitar secara anonim.
+  * Pin posisi terpadu yang rapi (`📍 Posisi Kamu · ☀️ UV 2.9`) dengan lingkaran halo proporsional.
+* **💾 Arsitektur Offline-First (SQLite Internal)**: Data telemetri selalu tersimpan di memori HP terlebih dahulu sehingga aplikasi tetap berfungsi penuh meski tanpa sinyal internet.
+* **⚡ Delta Threshold & Heartbeat Engine**: Backend hanya menyimpan baris telemetri baru jika terjadi perubahan nilai signifikan (UV ≥ 0.2, Suhu ≥ 0.3°C, VOC ≥ 10) atau sebagai checkpoint setiap 5 menit.
+* **🧪 Mode Demo Interaktif & 4 Skenario Cuaca**:
+  * Memungkinkan demonstrasi penuh tanpa perangkat fisik Bluetooth.
+  * Pilihan skenario: **Otomatis (Fluktuatif)**, **Normal/Sejuk**, **Panas Ekstrem**, dan **Polusi Udara**.
+* **📶 ESP32-C3 Web Controller (Demo Tanpa Sensor Kabel)**: Board ESP32 memancarkan WiFi AP internal (`Klimo-Simulator`) dengan Web Controller di browser (`http://192.168.4.1`) untuk simulasi live data.
 
 ---
 
 ## 🔄 Alur Solusi & Arsitektur Sistem
 
-Sistem Klimo Wearth bekerja dengan alur terintegrasi 3 lapisan (*Hardware Wearable*, *Aplikasi Mobile*, dan *Cloud Backend*):
-
 ### 1. Arsitektur Sistem (System Architecture)
 ```mermaid
 graph TD
-    subgraph Hardware [1. Perangkat Klimo Wearable / IoT Simulator]
-        ESP[ESP32-C3 Controller]
+    subgraph Hardware [1. Perangkat Klimo Wearable / ESP32-C3]
+        ESP[ESP32-C3 Microcontroller]
         S1[Sensor UV: LTR-390]
         S2[Sensor Suhu & RH: SHT40]
         S3[Sensor Kualitas Udara: SGP41]
+        WEB[Web Controller AP 192.168.4.1]
         
         S1 --> ESP
         S2 --> ESP
         S3 --> ESP
+        WEB --> ESP
     end
 
     subgraph Mobile [2. Aplikasi Mobile Flutter - Offline-First]
-        BLE_G[BLE Client / WiFi AP Bridge]
+        BLE_G[BLE Client / BLE Virtual Simulator]
         LocalDB[(SQLite Local DB - Offline Cache)]
         UI[Dashboard & Alert Monitor]
         SyncMgr[Background Sync Manager]
@@ -52,8 +71,8 @@ graph TD
 
     subgraph Backend [3. Cloud Backend - Laravel 13]
         API[REST API Sanctum]
-        DB[(Database MySQL / Telemetry)]
-        Heatmap[Aggregator Peta Komunitas]
+        DB[(Database MySQL / klimo_db)]
+        Heatmap[Spatial Aggregator Heatmap]
         
         API --> DB
         DB --> Heatmap
@@ -61,7 +80,7 @@ graph TD
 
     ESP -- "Transmisi Real-time (BLE / AP)" --> BLE_G
     SyncMgr -- "Sinkronisasi Batch (HTTP JSON)" --> API
-    Heatmap -- "Data Sebaran Wilayah" --> UI
+    Heatmap -- "Data Kawasan Anonim" --> UI
 ```
 
 ### 2. Alur Pengiriman & Sinkronisasi Data (Data Flow Sequence)
@@ -72,19 +91,19 @@ sequenceDiagram
     participant A as Aplikasi Mobile (Flutter)
     participant B as Backend Cloud (Laravel)
     
-    Note over W: Sensor mengukur kondisi lingkungan
-    W->>A: Kirim data telemetri via BLE / Local AP (Interval Real-time)
-    A->>A: Simpan ke SQLite Lokal & Update Tampilan Gauge UI
+    Note over W: Sensor membaca radiasi UV, Suhu, dan Polusi
+    W->>A: Kirim telemetri via BLE
+    A->>A: Simpan ke SQLite Lokal HP & Perbarui UI Seketika
     
-    alt Tersedia Koneksi Internet
-        A->>B: POST /api/telemetry/batch (Kirim data telemetri + GPS)
-        B->>B: Validasi & Simpan ke Database Cloud
-        B-->>A: Status 200 OK (Sinkronisasi Berhasil)
-        A->>B: GET /api/map/heatmap (Minta data sekeliling)
-        B-->>A: Return JSON Heatmap Wilayah
-        A->>A: Render Peta Komunitas
-    else Mode Tanpa Internet (Offline)
-        Note over A: Data tersimpan aman di SQLite lokal (Offline-First)
+    alt Terhubung Internet
+        A->>B: POST /api/telemetry/batch (Batch Sync data offline)
+        B->>B: Simpan data (Filter Delta & Heartbeat)
+        B-->>A: Status 201 Created (Data Tersinkron)
+        A->>B: GET /api/map/heatmap
+        B-->>A: Data sebaran iklim spasial kawasan
+        A->>A: Render Peta Iklim Wilayah Anonim
+    else Mode Offline (Tanpa Internet)
+        Note over A: Data aman di SQLite lokal HP (Offline-First)
     end
 ```
 
@@ -94,80 +113,115 @@ sequenceDiagram
 
 ```text
 KlimoApp/
-├── Backend/          # Laravel 13 API Backend
+├── Backend/                 # Laravel 13 API Backend
 │   ├── app/
-│   ├── database/     # Migrations & Seeders
-│   ├── routes/api.php
-│   └── ...
-├── IoT_Simulator/    # Firmware ESP32-C3 & Software Simulator
-│   ├── platformio.ini# Konfigurasi PlatformIO
-│   ├── simulator.py  # Python sensor simulator (no hardware needed)
-│   └── src/main.cpp  # Firmware C++ ESP32-C3
-├── FlutterApps/      # Flutter Mobile App
-│   ├── lib/          # UI, State & API Services
-│   ├── pubspec.yaml
-│   └── ...
-├── run_demo.sh       # Script otomatis interaktif untuk menjalankan ekosistem
-├── PANDUAN_MENJALANKAN.md # Panduan lengkap menjalankan seluruh komponen
+│   │   ├── Http/Controllers/Api/  # AuthController & TelemetryController
+│   │   └── Models/                # User, Device, Telemetry
+│   ├── database/migrations/       # Skema tabel users, devices, telemetries
+│   ├── routes/api.php             # Endpoint REST API
+│   └── tests/Feature/             # Feature test suite (18 test passed)
+├── IoT_Simulator/           # Firmware ESP32-C3 & Software Simulator
+│   ├── platformio.ini       # Konfigurasi PlatformIO
+│   ├── simulator.py         # Python sensor simulator (Backend injector)
+│   ├── diagram.json         # Diagram simulasi sirkuit Wokwi
+│   └── src/main.cpp         # Firmware C++ ESP32-C3 (BLE + Web AP Server)
+├── FlutterApps/             # Aplikasi Mobile Flutter
+│   ├── lib/
+│   │   ├── screens/         # Home, Map, Device, Profile, History, Setup
+│   │   ├── services/        # ApiService, LocalDataService (SQLite), BleSimulator
+│   │   └── theme/           # Palet warna terang & gelap
+│   └── pubspec.yaml
+├── run_demo.sh              # Runner interaktif untuk Linux / macOS
+├── run_demo.bat             # Runner interaktif untuk Windows
+├── PANDUAN_MENJALANKAN.md    # Panduan setup komprehensif
 └── README.md
 ```
 
 ---
 
-## ⚡ Cara Menjalankan Cepat (All-in-One)
+## ⚡ Cara Menjalankan Cepat (Interactive Runner)
 
-Gunakan skrip runner interaktif yang telah disediakan:
+Kami telah menyediakan skrip *runner* interaktif yang siap pakai untuk **Linux** maupun **Windows**:
 
+### Di Linux / macOS:
 ```bash
 ./run_demo.sh
 ```
-Pilih opsi **`[4]`** untuk menyalakan Backend + IoT Simulator secara otomatis di background dan membuka aplikasi Flutter.
+
+### Di Windows (Command Prompt / PowerShell):
+```cmd
+run_demo.bat
+```
+
+> **Menu Interaktif:**
+> * `[1]` Jalankan Aplikasi Flutter Saja
+> * `[2]` Jalankan Backend Laravel Saja (`host: 0.0.0.0:8000`)
+> * `[3]` Full Stack Demo (Backend Laravel di background + Flutter App)
+> * `[4]` Flash Firmware ke Board ESP32 (PlatformIO Upload via USB)
+> * `[5]` Buka Serial Monitor ESP32 (115200 baud)
+> * `[6]` Kompilasi / Validasi Firmware ESP32
+> * `[7]` Jalankan Python Simulator (Backend Data Injector)
+> * `[8]` Info Panduan Demo Lomba & Web Controller ESP32
 
 ---
 
-## 🚀 Panduan Menjalankan Manual (3 Terminal Terpisah)
-
-Untuk melihat log setiap komponen secara jelas, buka 3 jendela terminal:
+## 🚀 Panduan Menjalankan Manual (Per Komponen)
 
 ### 1. Backend (Laravel 13)
 ```bash
 cd Backend
-cp .env.example .env    # Jika belum ada
+composer install
+cp .env.example .env
+php artisan key:generate
 php artisan migrate --seed
 php artisan serve --host=0.0.0.0 --port=8000
 ```
-> **Akun Default untuk Uji Coba:**
-> - **Email:** `test@example.com`
-> - **Password:** `password`
+> **Kredensial Default Uji Coba:**
+> - Email: `test@example.com`
+> - Kata Sandi: `password`
 
-### 2. IoT Simulator (Python / ESP32-C3)
+### 2. IoT Simulator / Firmware ESP32
 ```bash
 cd IoT_Simulator
-# Opsi A: Software Simulator (Python)
+
+# Opsi A: Software Python Simulator (Inject data langsung ke API)
 python3 simulator.py
 
-# Opsi B: Hardware ESP32-C3 (PlatformIO)
+# Opsi B: Hardware ESP32-C3 (Upload firmware via USB)
 pio run -t upload && pio device monitor -b 115200
 ```
 
-### 3. Flutter App (`FlutterApps`)
+### 3. Aplikasi Flutter
 ```bash
 cd FlutterApps
 flutter pub get
 flutter run
 ```
 
-> 📖 Untuk panduan mendalam dan konfigurasi IP Emulator/Device fisik, baca [PANDUAN_MENJALANKAN.md](PANDUAN_MENJALANKAN.md).
+---
+
+## 🔑 Endpoint REST API
+
+| Method | Endpoint | Keterangan | Autentikasi |
+| :--- | :--- | :--- | :---: |
+| `POST` | `/api/register` | Mendaftarkan akun baru (nama, email, password, skin_type) | Publik |
+| `POST` | `/api/login` | Masuk dan memperoleh Sanctum Bearer Token | Publik |
+| `POST` | `/api/login/google` | Autentikasi akun Google terintegrasi backend | Publik |
+| `POST` | `/api/logout` | Revoke token autentikasi sesi aktif | Bearer Token |
+| `GET`  | `/api/profile` | Mengambil data profil pengguna & tipe kulit | Bearer Token |
+| `PUT`  | `/api/profile` | Memperbarui nama dan/atau tipe kulit | Bearer Token |
+| `GET`  | `/api/devices` | Mengambil daftar perangkat pengguna | Publik / Token |
+| `POST` | `/api/devices` | Mendaftarkan & menautkan perangkat ke akun pengguna | Publik / Token |
+| `POST` | `/api/telemetry` | Mengirim data sensor (Delta Threshold & Heartbeat filter) | Publik / Token |
+| `POST` | `/api/telemetry/batch` | Sinkronisasi kumpulan data offline sekaligus dari HP | Publik / Token |
+| `GET`  | `/api/telemetry/latest` | Mengambil telemetri terbaru pengguna | Publik / Token |
+| `GET`  | `/api/telemetry/history`| Mengambil riwayat telemetri (grafik & tren) | Publik / Token |
+| `GET`  | `/api/map/heatmap` | Mengambil data spasial lingkungan untuk peta kawasan | Publik / Token |
 
 ---
 
-## 🔑 Endpoint API Utama
+## 🧪 Status Pengujian & Kualitas Kode
 
-| Method | Endpoint | Keterangan |
-| :--- | :--- | :--- |
-| `POST` | `/api/register` | Mendaftarkan akun baru |
-| `POST` | `/api/login` | Login dan memperoleh Bearer Token Sanctum |
-| `GET`  | `/api/profile` | Mengambil data user yang sedang login |
-| `POST` | `/api/telemetry` | Mengirim data pembacaan sensor IoT (UV, Suhu, dsb.) |
-| `GET`  | `/api/telemetry/history` | Riwayat data telemetri sensor |
-| `POST` | `/api/logout` | Revoke token / logout |
+* **Backend Laravel (`php artisan test`)**: **18 Passed** / **571 Assertions** / **0 Failures**.
+* **Flutter Apps (`flutter analyze`)**: **0 Issues** / **Bersih tanpa warning**.
+* **Flutter Widget Tests (`flutter test`)**: **100% Passed**.

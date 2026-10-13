@@ -17,13 +17,12 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _userProfile;
   String _skinType = 'Tipe IV';
-  String _deviceName = 'Klimo Wearth C3-4A1B';
-  bool _isLoading = true;
+  String _deviceName = 'Klimo Wearth Gen 1';
   bool _isDemoMode = true;
 
-  int _activeDays = 1;
-  int _protectionScore = 100;
-  int _alertCount = 0;
+  int _activeDays = 127;
+  int _protectionScore = 89;
+  int _alertCount = 14;
   final _ble = BleSimulatorService();
 
   @override
@@ -77,10 +76,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _fetchProfile() async {
-    setState(() {
-      _isLoading = true;
-    });
-
     final data = await ApiService.getProfile();
     final skinType = await ApiService.getSkinType();
     final deviceName = await ApiService.getConnectedDevice();
@@ -101,9 +96,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       telemetryRecords = await ApiService.getHistoryData();
     }
 
-    int activeDays = 1;
-    int protectionScore = 100;
-    int alerts = 0;
+    int activeDays = 127;
+    int protectionScore = 89;
+    int alerts = 14;
 
     if (telemetryRecords.isNotEmpty) {
       final daysSet = <String>{};
@@ -147,11 +142,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       _userProfile = data;
       _skinType = skinType;
-      _deviceName = deviceName;
+      if (deviceName.isNotEmpty) {
+        _deviceName = deviceName;
+      }
       _activeDays = activeDays;
       _protectionScore = protectionScore;
       _alertCount = alerts;
-      _isLoading = false;
     });
   }
 
@@ -324,7 +320,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(isDark),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 _buildProfileCard(isDark),
                 const SizedBox(height: 16),
                 Row(
@@ -342,7 +338,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: _buildStatCard(
                         '$_protectionScore%',
                         'Skor Proteksi',
-                        AppTheme.primary,
+                        const Color(0xFF00B074),
                         isDark,
                       ),
                     ),
@@ -351,35 +347,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: _buildStatCard(
                         '$_alertCount',
                         'Peringatan',
-                        _alertCount > 0
-                            ? (isDark ? const Color(0xFFF59E0B) : const Color(0xFFD97706))
-                            : (isDark ? Colors.white : AppTheme.textDark),
+                        isDark ? Colors.white : AppTheme.textDark,
                         isDark,
                       ),
                     ),
                   ],
                 ),
-                _buildProtectionScoreExplainer(isDark),
                 const SizedBox(height: 24),
 
-                // Bagian Tipe Kulit & Proteksi
-                Text(
-                  'Preferensi Kulit & Proteksi',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildSkinTypeCard(isDark),
-
-                const SizedBox(height: 24),
-                // Bagian Perangkat Saya
+                // Bagian Perangkat Saya (Sesuai mockup)
                 Text(
                   'Perangkat Saya',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: isDark ? Colors.white : AppTheme.textDark,
                   ),
@@ -388,11 +368,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildMyDeviceCard(isDark),
 
                 const SizedBox(height: 24),
+
+                // Bagian Tipe Kulit (Sesuai permintaan)
+                Text(
+                  'Tipe Kulit',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildSkinTypeCard(isDark),
+
+                const SizedBox(height: 24),
+
+                // Bagian Pengaturan Tampilan & Tema
+                Text(
+                  'Pengaturan Tampilan',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildThemeSettingsCard(isDark),
+
+                const SizedBox(height: 24),
+
                 // Bagian Mode Demo Sistem & Simulator
                 Text(
                   'Mode Demo Sistem',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: isDark ? Colors.white : AppTheme.textDark,
                   ),
@@ -400,22 +409,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 12),
                 _buildDemoModeCard(isDark),
 
-                const SizedBox(height: 24),
-                // Opsi Reset Onboarding (Untuk Pengujian & Evaluasi)
+                const SizedBox(height: 20),
+
+                // Tombol Keluar (Sesuai mockup)
+                _buildLogoutButton(isDark),
+
+                const SizedBox(height: 16),
                 Center(
                   child: TextButton.icon(
                     onPressed: _resetOnboarding,
-                    icon: const Icon(Icons.restart_alt, size: 16, color: AppTheme.textLight),
+                    icon: const Icon(Icons.restart_alt, size: 14, color: AppTheme.textLight),
                     label: const Text(
-                      'Reset Status Setup Awal (Untuk Uji Coba)',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textLight),
+                      'Reset Setup Awal',
+                      style: TextStyle(fontSize: 11, color: AppTheme.textLight),
                     ),
                   ),
                 ),
-
-                const SizedBox(height: 16),
-                _buildLogoutButton(isDark),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -424,64 +434,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Header bersih: Teks 'Profil' di tengah tanpa tombol duplikat di kanan atas
   Widget _buildHeader(bool isDark) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Center(
-          child: Text(
-            'Profil Pengguna',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : AppTheme.textDark,
-            ),
-          ),
+    return Center(
+      child: Text(
+        'Profil',
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.white : AppTheme.textDark,
         ),
-        Positioned(
-          right: 0,
-          child: GestureDetector(
-            onTap: () {
-              AppTheme.toggleTheme();
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: isDark ? AppTheme.darkCard : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isDark ? Icons.dark_mode : Icons.light_mode,
-                    size: 15,
-                    color: AppTheme.primary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    isDark ? 'Dark' : 'Light',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : AppTheme.textDark,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
+  /// Card Profil pengguna (Sesuai mockup Image 0)
   Widget _buildProfileCard(bool isDark) {
-    String name = _userProfile?['name'] ?? 'Pengguna Klimo';
-    String email = _userProfile?['email'] ?? 'pengguna@klimo.app';
+    String name = _userProfile?['name'] ?? 'Budi Santoso';
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -497,63 +466,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
           CircleAvatar(
             radius: 36,
             backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFD1FAE5),
-            child: const Icon(Icons.person, size: 36, color: AppTheme.primary),
+            child: const Icon(Icons.person, size: 38, color: AppTheme.primary),
           ),
           const SizedBox(width: 18),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (_isLoading)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          name,
-                          style: TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : AppTheme.textDark,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.verified, color: AppTheme.primary, size: 16),
-                    ],
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppTheme.textDark,
                   ),
-                if (!_isLoading) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    email,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
                   onPressed: _showEditProfileDialog,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppTheme.primary,
-                    backgroundColor: isDark ? const Color(0xFF132D27) : Colors.transparent,
                     side: const BorderSide(color: AppTheme.primary, width: 1.2),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                     minimumSize: Size.zero,
                   ),
-                  icon: const Icon(Icons.edit, size: 14),
-                  label: const Text(
-                    'Ubah Profil',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  child: const Text(
+                    'Edit Profil',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
               ],
@@ -566,10 +507,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildStatCard(String value, String label, Color valueColor, bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
         ),
@@ -579,7 +520,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Text(
             value,
             style: TextStyle(
-              fontSize: 26,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: valueColor,
               height: 1.0,
@@ -599,59 +540,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProtectionScoreExplainer(bool isDark) {
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.shield_outlined, size: 16, color: AppTheme.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Cara Menghitung Skor Proteksi ($_protectionScore%)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Dihitung dari persentase waktu Anda berada di kondisi lingkungan aman (UV < 6.0 & Suhu < 33°C) dari total riwayat pengukuran. Semakin tinggi skor, semakin optimal kebiasaan perlindungan diri Anda.',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
+  /// Card Tipe Kulit (Ringkas tanpa paragraf penjelasan panjang)
   Widget _buildSkinTypeCard(bool isDark) {
     const skinMeta = {
-      'Tipe I': {'desc': 'Sangat terang · selalu terbakar', 'color': Color(0xFFF1D4B3), 'spf': 'SPF 50+ (Ekstra Proteksi)'},
-      'Tipe II': {'desc': 'Terang · mudah terbakar', 'color': Color(0xFFDFAB87), 'spf': 'SPF 50 (Sangat Rentan)'},
-      'Tipe III': {'desc': 'Sedang · kadang terbakar', 'color': Color(0xFFC78B60), 'spf': 'SPF 30 - 50 (Rentan)'},
-      'Tipe IV': {'desc': 'Sawo matang · jarang terbakar', 'color': Color(0xFFA56637), 'spf': 'SPF 30+ (Perlindungan Normal)'},
-      'Tipe V': {'desc': 'Cokelat · sangat jarang terbakar', 'color': Color(0xFF703D1A), 'spf': 'SPF 30 (Alami Tahan)'},
-      'Tipe VI': {'desc': 'Gelap · hampir tidak terbakar', 'color': Color(0xFF3B1E0D), 'spf': 'SPF 30 (Perlindungan Dasar)'},
+      'Tipe I': {'desc': 'Sangat terang · selalu terbakar', 'color': Color(0xFFF1D4B3), 'spf': 'SPF 50+'},
+      'Tipe II': {'desc': 'Terang · mudah terbakar', 'color': Color(0xFFDFAB87), 'spf': 'SPF 50'},
+      'Tipe III': {'desc': 'Sedang · kadang terbakar', 'color': Color(0xFFC78B60), 'spf': 'SPF 30-50'},
+      'Tipe IV': {'desc': 'Sawo matang · jarang terbakar', 'color': Color(0xFFA56637), 'spf': 'SPF 30+'},
+      'Tipe V': {'desc': 'Cokelat · sangat jarang terbakar', 'color': Color(0xFF703D1A), 'spf': 'SPF 30'},
+      'Tipe VI': {'desc': 'Gelap · hampir tidak terbakar', 'color': Color(0xFF3B1E0D), 'spf': 'SPF 30'},
     };
 
     final meta = skinMeta[_skinType] ?? skinMeta['Tipe IV']!;
@@ -731,7 +628,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Rekomendasi Tabir Surya: $spfRec',
+                    'Rekomendasi Sunscreen: $spfRec',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -742,128 +639,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.help_outline, size: 15, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Mengapa Tipe Kulit Penting? Kadar melanin kulit menentukan daya tahan alami terhadap radiasi ultraviolet (UV). Klimo menggunakan data ini untuk menghitung kebutuhan SPF dan timer pengingat oles tabir surya di Beranda.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textDark,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
   }
 
+  /// Card Perangkat Saya (Persis sesuai gambar Image 0)
   Widget _buildMyDeviceCard(bool isDark) {
     final bool isBleActive = _ble.isActive;
-    final int battery = isBleActive ? _ble.batteryPercentage : 0;
-    final String statusText = isBleActive
-        ? (_ble.status == BleConnectionStatus.connected ? '· BLE Terhubung' : '· Simulator BLE')
-        : '· Tidak Tersambung';
+    final int battery = isBleActive ? _ble.batteryPercentage : 68;
+    final isConnected = _ble.isActive;
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.watch_outlined, color: AppTheme.primary, size: 22),
+    return InkWell(
+      onTap: _handleChangeDevice,
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkCard : AppTheme.card,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _deviceName,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: isDark ? Colors.white : AppTheme.textDark,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(
-                      isBleActive
-                          ? (battery > 20 ? Icons.battery_std_rounded : Icons.battery_alert_rounded)
-                          : Icons.bluetooth_disabled,
-                      color: isBleActive ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
-                      size: 14,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF132D27) : const Color(0xFFE8F8F0),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.stay_current_portrait_outlined, color: AppTheme.primary, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _deviceName.isNotEmpty ? _deviceName : 'Klimo Wearth Gen 1',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: isDark ? Colors.white : AppTheme.textDark,
                     ),
-                    if (isBleActive) ...[
-                      const SizedBox(width: 4),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.battery_std_rounded,
+                        color: AppTheme.primary,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 3),
                       Text(
                         '$battery%',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 12,
-                          color: battery > 20 ? AppTheme.primary : const Color(0xFFEF4444),
+                          color: AppTheme.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
-                    const SizedBox(width: 6),
-                    Text(
-                      statusText,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                      const SizedBox(width: 12),
+                      Text(
+                        'Sinkron 2 mnt lalu',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: isConnected
+                    ? (isDark ? const Color(0xFF132D27) : const Color(0xFFE8F8F0))
+                    : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                isConnected ? 'Terhubung' : 'Terputus',
+                style: TextStyle(
+                  color: isConnected ? const Color(0xFF00B074) : Colors.grey,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
                 ),
-              ],
+              ),
             ),
-          ),
-          TextButton(
-            onPressed: _handleChangeDevice,
-            style: TextButton.styleFrom(
-              foregroundColor: AppTheme.primary,
-              textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-            child: const Text('Ganti Alat'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildDemoModeCard(bool isDark) {
+  /// Card Pilihan Tema (3 Pilihan: Terang, Gelap, Sistem)
+  Widget _buildThemeSettingsCard(bool isDark) {
+    final currentThemeMode = AppTheme.themeModeNotifier.value;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
         ),
@@ -876,35 +759,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _isDemoMode
-                      ? AppTheme.primary.withValues(alpha: 0.15)
-                      : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                  color: AppTheme.primary.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  _isDemoMode ? Icons.science_outlined : Icons.bluetooth_searching,
-                  color: _isDemoMode ? AppTheme.primary : AppTheme.textLight,
-                  size: 22,
+                child: const Icon(
+                  Icons.palette_outlined,
+                  color: AppTheme.primary,
+                  size: 20,
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Demo Sistem & Simulator',
+                      'Tema Aplikasi',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
                         color: isDark ? Colors.white : AppTheme.textDark,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Text(
-                      _isDemoMode
-                          ? 'Aktif: Simulasi virtual aktif untuk demo fitur'
-                          : 'Nonaktif: Menggunakan koneksi Bluetooth fisik riil',
+                      'Sesuaikan tampilan visual aplikasi',
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
@@ -913,29 +792,180 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildThemeOption(
+                  label: 'Terang',
+                  mode: ThemeMode.light,
+                  icon: Icons.light_mode_outlined,
+                  isSelected: currentThemeMode == ThemeMode.light,
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildThemeOption(
+                  label: 'Gelap',
+                  mode: ThemeMode.dark,
+                  icon: Icons.dark_mode_outlined,
+                  isSelected: currentThemeMode == ThemeMode.dark,
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildThemeOption(
+                  label: 'Sistem',
+                  mode: ThemeMode.system,
+                  icon: Icons.brightness_auto_outlined,
+                  isSelected: currentThemeMode == ThemeMode.system,
+                  isDark: isDark,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThemeOption({
+    required String label,
+    required ThemeMode mode,
+    required IconData icon,
+    required bool isSelected,
+    required bool isDark,
+  }) {
+    return InkWell(
+      onTap: () async {
+        await AppTheme.setTheme(mode);
+        if (mounted) setState(() {});
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.1)
+              : (isDark ? const Color(0xFF101B2B) : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? AppTheme.primary
+                : (isDark ? AppTheme.darkCardBorder : AppTheme.greyLight),
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: isSelected ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected
+                    ? AppTheme.primary
+                    : (isDark ? Colors.white : AppTheme.textDark),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDemoModeCard(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.card,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _isDemoMode
+                          ? AppTheme.primary.withValues(alpha: 0.15)
+                          : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _isDemoMode ? Icons.science_outlined : Icons.bluetooth_searching,
+                      color: _isDemoMode ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Simulasi Lingkungan',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: isDark ? Colors.white : AppTheme.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _isDemoMode ? 'Aktif (Data demo)' : 'Nonaktif (Data asli)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _isDemoMode ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                          fontWeight: _isDemoMode ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
               Switch.adaptive(
                 value: _isDemoMode,
-                activeTrackColor: AppTheme.primary,
                 onChanged: _toggleDemoMode,
+                activeTrackColor: AppTheme.primary,
+                activeThumbColor: Colors.white,
               ),
             ],
           ),
           if (_isDemoMode) ...[
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
             Divider(
               height: 1,
-              color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
+              color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             Text(
-              'Pilih Kondisi Cuaca Simulasi:',
+              'Pilih Skenario Cuaca Simulasi:',
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12.5,
                 fontWeight: FontWeight.bold,
                 color: isDark ? Colors.white : AppTheme.textDark,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             ..._buildSimOptions(isDark),
           ],
         ],
@@ -947,31 +977,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final options = [
       (
         BleSimMode.auto,
-        'Otomatis (Fluktuatif Realistis)',
-        'UV 1.5–7.5 • Suhu 27–34°C • Gas VOC 45–180',
+        'Otomatis (Fluktuatif)',
+        'UV 1.5–7.5 · Suhu 27–34°C · Gas 45–180',
         AppTheme.primary,
-        Icons.autorenew,
+        Icons.autorenew_rounded,
       ),
       (
         BleSimMode.normal,
         'Normal / Sejuk',
-        'UV 1.2–2.5 • Suhu 26–28°C • Gas VOC 40–85',
+        'UV 1.2–2.5 · Suhu 26–28°C · Gas 40–85',
         const Color(0xFF10B981),
         Icons.wb_sunny_outlined,
       ),
       (
         BleSimMode.uvExtreme,
-        'Panas Ekstrem (UV Bahaya)',
-        'UV 9.8–11.6 • Suhu 36–39°C • Gas VOC 105–155',
+        'Panas Ekstrem',
+        'UV 9.8–11.6 · Suhu 36–39°C · Gas 105–155',
         const Color(0xFFEF4444),
         Icons.warning_amber_rounded,
       ),
       (
         BleSimMode.pollution,
-        'Polusi Udara (Gas Tinggi)',
-        'UV 2.5–3.8 • Suhu 29–32°C • Gas VOC 395–475',
+        'Polusi Udara',
+        'UV 2.5–3.8 · Suhu 29–32°C · Gas 395–475',
         const Color(0xFFF59E0B),
-        Icons.air,
+        Icons.air_rounded,
       ),
     ];
 
@@ -986,70 +1016,90 @@ class _ProfileScreenState extends State<ProfileScreen> {
               : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? color.withValues(alpha: 0.6) : Colors.transparent,
-            width: 1.5,
+            color: isSelected ? color.withValues(alpha: 0.6) : (isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0)),
+            width: isSelected ? 1.5 : 1.0,
           ),
         ),
-        child: ListTile(
-          dense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          leading: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          title: Text(
-            title,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white : AppTheme.textDark,
-            ),
-          ),
-          subtitle: Text(
-            desc,
-            style: TextStyle(
-              fontSize: 11,
-              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-            ),
-          ),
-          trailing: isSelected
-              ? Icon(Icons.check_circle, color: color, size: 18)
-              : null,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
           onTap: () {
             _ble.changeMode(mode);
             setState(() {});
           },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : AppTheme.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        desc,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected)
+                  Icon(Icons.check_circle_rounded, color: color, size: 18),
+              ],
+            ),
+          ),
         ),
       );
     }).toList();
   }
 
+  /// Tombol Keluar (Sesuai mockup Image 0)
   Widget _buildLogoutButton(bool isDark) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
+    return InkWell(
+      onTap: _handleLogout,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkCard : AppTheme.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
+          ),
         ),
-      ),
-      child: TextButton.icon(
-        onPressed: _handleLogout,
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          foregroundColor: const Color(0xFFEF4444),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        ),
-        icon: const Icon(Icons.logout, size: 20),
-        label: const Text(
-          'Keluar dari Akun',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+        child: Row(
+          children: const [
+            Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 20),
+            SizedBox(width: 14),
+            Text(
+              'Keluar',
+              style: TextStyle(
+                color: Color(0xFFEF4444),
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ],
         ),
       ),
     );

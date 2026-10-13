@@ -209,7 +209,7 @@ class TelemetryController extends Controller
 
     public function latest(Request $request)
     {
-        $userId = $request->user()?->id ?? 1;
+        $userId = $request->user('sanctum')?->id ?? $request->input('user_id') ?? 1;
         
         $telemetry = Telemetry::where('user_id', $userId)
             ->orderBy('created_at', 'desc')
@@ -227,7 +227,7 @@ class TelemetryController extends Controller
 
     public function history(Request $request)
     {
-        $userId = $request->user()?->id ?? 1;
+        $userId = $request->user('sanctum')?->id ?? $request->input('user_id') ?? 1;
 
         // Ambil 50 data terakhir untuk riwayat & grafik
         $history = Telemetry::where('user_id', $userId)
@@ -246,7 +246,7 @@ class TelemetryController extends Controller
 
     public function devices(Request $request)
     {
-        $userId = $request->user()?->id ?? 1;
+        $userId = $request->user('sanctum')?->id ?? $request->input('user_id') ?? 1;
         
         $devices = Device::where('user_id', $userId)->get();
 
@@ -257,5 +257,34 @@ class TelemetryController extends Controller
         return response()->json([
             'data' => $devices
         ]);
+    }
+
+    public function storeDevice(Request $request)
+    {
+        $request->validate([
+            'mac_address' => 'required|string',
+            'name' => 'nullable|string',
+        ]);
+
+        $userId = $request->user('sanctum')?->id ?? $request->input('user_id') ?? 1;
+        if (!User::where('id', $userId)->exists()) {
+            $fallback = User::first();
+            $userId = $fallback ? $fallback->id : User::create([
+                'name' => 'Demo User',
+                'email' => 'demo@klimo.app',
+                'password' => bcrypt('password123'),
+            ])->id;
+        }
+
+        $device = Device::updateOrCreate(
+            ['mac_address' => $request->mac_address],
+            ['user_id' => $userId, 'name' => $request->name ?? 'Klimo Device']
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Perangkat berhasil disimpan',
+            'data' => $device,
+        ], 201);
     }
 }

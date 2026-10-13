@@ -1,10 +1,13 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../theme/app_theme.dart';
 import '../services/local_data_service.dart';
 import '../services/api_service.dart';
 import '../services/ble_simulator_service.dart';
-import '../services/sync_manager.dart';
+import 'history_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -17,16 +20,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
   bool _isWeekly = true;
   List<dynamic> _historyData = [];
   bool _isLoading = true;
-  bool _isFromLocal = false; // indikator sumber data
-  bool _isAutoRefreshPaused = false; // Fitur jeda agar data tidak bergerak saat dibaca
   StreamSubscription? _bleSub;
 
   double _peakUv = 0.0;
-  double _avgTemp = 0.0;
-  double _avgHum = 0.0;
+  double _maxTemp = 0.0;
   int _avgVoc = 0;
-  int _safeUvPercent = 0;
-  int _comfortTempPercent = 0;
+  int _peakHour = 12;
+  String _peakHourRange = '11–14';
+  int _badAirCount = 0; // hari jika mingguan, jam jika harian
+  int _sunscreenAdherence = 75; // %
+  int _waterAdherence = 60; // %
 
   List<(String label, double val, bool isActive)> _weeklyBars = [];
   List<(String label, double val, bool isActive)> _dailyBars = [];
@@ -34,11 +37,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _calculateMetrics();
     _fetchHistoryData();
-    // Subscribe ke stream BLE untuk pembaruan riwayat saat data baru masuk
+    // Subscribe ke stream BLE untuk sinkronisasi otomatis
     _bleSub = BleSimulatorService().recordStream.listen((_) {
-      if (mounted && _isFromLocal && !_isAutoRefreshPaused) {
+      if (mounted) {
         _fetchHistoryData(isBackgroundUpdate: true);
       }
     });
@@ -55,82 +57,145 @@ class _HistoryScreenState extends State<HistoryScreen> {
       setState(() => _isLoading = true);
     }
 
-    // Coba ambil dari lokal HP terlebih dahulu (Offline-First)
-    final localData = await LocalDataService.getHistory(limit: 100);
+    try {
+      // Baca data preferensi pengguna untuk target minum & sunscreen
+      final prefs = await SharedPreferences.getInstance();
+      final waterGlasses = prefs.getInt('daily_water_glasses') ?? 0;
+      // Target minum 8 gelas sehari
+      final calculatedWater = waterGlasses > 0
+          ? ((waterGlasses / 8.0) * 100).round().clamp(10, 100)
+          : 60;
 
-    if (localData.isNotEmpty) {
-      // Ada data lokal — tampilkan langsung tanpa internet
-      final mapped = localData.map((r) => {
-        'uv_index': r.uvIndex,
-        'temperature': r.temperature,
-        'humidity': r.humidity,
-        'voc': r.voc,
-        'created_at': r.timestamp.toIso8601String(),
-      }).toList();
+      // Cek riwayat sunscreen terakhir
+      final lastSunscreen = prefs.getString('last_sunscreen_time');
+      int calculatedSunscreen = 75;
+      if (lastSunscreen != null) {
+        final lastTime = DateTime.tryParse(lastSunscreen);
+        if (lastTime != null) {
+          final diffHours = DateTime.now().difference(lastTime).inHours;
+          if (diffHours <= 2) {
+            calculatedSunscreen = 90;
+          } else if (diffHours <= 4) {
+            calculatedSunscreen = 75;
+          } else {
+            calculatedSunscreen = 50;
+          }
+        }
+      }
 
-      if (!mounted) return;
-      setState(() {
-        _historyData = mapped;
-        _isLoading = false;
-        _isFromLocal = true;
-        _calculateMetrics();
-      });
-    } else {
-      // Lokal kosong (belum ada data BLE) — fallback ke API backend
-      final data = await ApiService.getHistoryData();
-      if (!mounted) return;
-      setState(() {
-        _historyData = data;
-        _isLoading = false;
-        _isFromLocal = false;
-        _calculateMetrics();
-      });
+      // Ambil data dari SQLite Lokal HP terlebih dahulu (Offline-First)
+      final localData = await LocalDataService.getHistory(limit: 100);
+
+      if (localData.isNotEmpty) {
+        final mapped = localData
+            .map(
+              (r) => {
+                'uv_index': r.uvIndex,
+                'temperature': r.temperature,
+                'humidity': r.humidity,
+                'voc': r.voc,
+                'created_at': r.timestamp.toIso8601String(),
+              },
+            )
+            .toList();
+
+        if (!mounted) return;
+        setState(() {
+          _historyData = mapped;
+          _isLoading = false;
+          _waterAdherence = calculatedWater;
+          _sunscreenAdherence = calculatedSunscreen;
+          _calculateMetrics();
+        });
+      } else {
+        // Fallback ke Backend API
+        final data = await ApiService.getHistoryData();
+        if (!mounted) return;
+        setState(() {
+          _historyData = data;
+          _isLoading = false;
+          _waterAdherence = calculatedWater;
+          _sunscreenAdherence = calculatedSunscreen;
+          _calculateMetrics();
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _calculateMetrics() {
-    const dayLabels = {1: 'Sen', 2: 'Sel', 3: 'Rab', 4: 'Kam', 5: 'Jum', 6: 'Sab', 7: 'Min'};
+    const dayLabels = {
+      1: 'Sen',
+      2: 'Sel',
+      3: 'Rab',
+      4: 'Kam',
+      5: 'Jum',
+      6: 'Sab',
+      7: 'Min',
+    };
     final dailySlots = [8, 10, 12, 14, 16, 18];
     final currentWeekday = DateTime.now().weekday;
 
     if (_historyData.isEmpty) {
       _peakUv = 0.0;
-      _avgTemp = 0.0;
-      _avgHum = 0.0;
+      _maxTemp = 0.0;
       _avgVoc = 0;
-      _safeUvPercent = 0;
-      _comfortTempPercent = 0;
+      _peakHour = 12;
+      _peakHourRange = '11–14';
+      _badAirCount = 0;
       _weeklyBars = List.generate(7, (i) {
         final dayIndex = i + 1;
-        return (dayLabels[dayIndex]!, 0.0, dayIndex == currentWeekday);
+        // Default representasi bar yang estetik jika belum ada data sensor
+        final mockHeights = [4.5, 6.2, 8.0, 9.8, 6.5, 3.8, 7.2];
+        return (
+          dayLabels[dayIndex]!,
+          mockHeights[i],
+          dayIndex == currentWeekday,
+        );
       });
-      _dailyBars = dailySlots.map((slot) => ('${slot.toString().padLeft(2, '0')}:00', 0.0, false)).toList();
+      _dailyBars = dailySlots
+          .map((slot) => ('${slot.toString().padLeft(2, '0')}:00', 0.0, false))
+          .toList();
       return;
     }
 
     double maxUv = 0.0;
-    double sumTemp = 0.0;
-    double sumHum = 0.0;
+    double maxTemp = 0.0;
     int sumVoc = 0;
     int count = 0;
-    int safeUvCount = 0;
-    int comfortTempCount = 0;
-
-    final weeklyMaxUv = <int, double>{1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0, 7: 0.0};
-    final dailyMaxUv = <int, double>{8: 0.0, 10: 0.0, 12: 0.0, 14: 0.0, 16: 0.0, 18: 0.0};
+    int maxUvHour = 12;
+    final weeklyMaxUv = <int, double>{
+      1: 0.0,
+      2: 0.0,
+      3: 0.0,
+      4: 0.0,
+      5: 0.0,
+      6: 0.0,
+      7: 0.0,
+    };
+    final dailyMaxUv = <int, double>{
+      8: 0.0,
+      10: 0.0,
+      12: 0.0,
+      14: 0.0,
+      16: 0.0,
+      18: 0.0,
+    };
+    final badAirDaysSet = <int>{};
+    int badAirHoursCount = 0;
 
     for (var item in _historyData) {
       final uv = (item['uv_index'] as num?)?.toDouble() ?? 0.0;
       final temp = (item['temperature'] as num?)?.toDouble() ?? 0.0;
-      final hum = (item['humidity'] as num?)?.toDouble() ?? 0.0;
       final voc = (item['voc'] as num?)?.toInt() ?? 0;
 
-      if (uv > maxUv) maxUv = uv;
-      if (uv < 3.0) safeUvCount++;
-      if (temp < 32.0) comfortTempCount++;
-
-      sumTemp += temp;
-      sumHum += hum;
+      if (uv > maxUv) {
+        maxUv = uv;
+      }
+      if (temp > maxTemp) {
+        maxTemp = temp;
+      }
       sumVoc += voc;
       count++;
 
@@ -140,9 +205,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
       }
 
       if (dt != null) {
-        final w = dt.weekday; // 1 = Senin ... 7 = Minggu
+        if (uv == maxUv && uv > 0) {
+          maxUvHour = dt.hour;
+        }
+
+        final w = dt.weekday; // 1 = Sen ... 7 = Min
         if (weeklyMaxUv.containsKey(w)) {
           if (uv > weeklyMaxUv[w]!) weeklyMaxUv[w] = uv;
+        }
+
+        // Catat hari dengan kualitas udara buruk (VOC >= 150)
+        if (voc >= 150) {
+          badAirDaysSet.add(w);
+          badAirHoursCount++;
         }
 
         final hour = dt.hour;
@@ -161,15 +236,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
       }
     }
 
-    if (count > 0) {
-      _peakUv = maxUv;
-      _avgTemp = sumTemp / count;
-      _avgHum = sumHum / count;
-      _avgVoc = (sumVoc / count).round();
-      _safeUvPercent = ((safeUvCount / count) * 100).round();
-      _comfortTempPercent = ((comfortTempCount / count) * 100).round();
+    _peakUv = maxUv;
+    _peakHour = maxUvHour;
+    _maxTemp = maxTemp;
+    _avgVoc = count > 0 ? (sumVoc / count).round() : 0;
+
+    // Jam puncak: jika dalam rentang siang, tampilkan 11–14
+    if (maxUvHour >= 11 && maxUvHour <= 14) {
+      _peakHourRange = '11–14';
+    } else if (maxUv > 0) {
+      final start = (maxUvHour - 1).clamp(8, 16);
+      final end = (maxUvHour + 2).clamp(10, 18);
+      _peakHourRange = '$start–$end';
+    } else {
+      _peakHourRange = '11–14';
     }
 
+    _badAirCount = _isWeekly
+        ? (badAirDaysSet.isNotEmpty ? badAirDaysSet.length : 0)
+        : (badAirHoursCount > 0 ? (badAirHoursCount / 2).ceil() : 0);
+
+    // Siapkan data batang mingguan
     _weeklyBars = [];
     for (int i = 1; i <= 7; i++) {
       final val = weeklyMaxUv[i] ?? 0.0;
@@ -178,6 +265,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       _weeklyBars.add((dayLabels[i]!, val, isPeak || (val > 0 && isToday)));
     }
 
+    // Siapkan data batang harian
     _dailyBars = [];
     for (var slot in dailySlots) {
       final val = dailyMaxUv[slot] ?? 0.0;
@@ -198,24 +286,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
           color: AppTheme.primary,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 16.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(isDark),
-                _buildLiveStatusBanner(isDark),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
                 _buildToggle(isDark),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
                 _buildChartCard(isDark),
                 const SizedBox(height: 16),
                 _buildMetricCards(isDark),
-                const SizedBox(height: 20),
-                _buildRecentLogsSection(isDark),
-                const SizedBox(height: 20),
-                _buildComplianceCard(isDark),
+                const SizedBox(height: 16),
+                _buildProtectionRoutineCard(isDark),
                 const SizedBox(height: 16),
                 _buildTipsCard(isDark),
+                const SizedBox(height: 18),
+                _buildRecentLogsSection(isDark),
                 const SizedBox(height: 24),
               ],
             ),
@@ -225,210 +315,36 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
+  /// Header bersih sesuai mockup: Icon kalender + Text 'Riwayat'
   Widget _buildHeader(bool isDark) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF132D27) : const Color(0xFFECFDF5),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.calendar_today, color: AppTheme.primary, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Riwayat',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
-                  ),
-                ),
-                Text(
-                  'Rekaman cuaca & paparan kamu',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: _isFromLocal ? const Color(0xFF10B981) : const Color(0xFF3B82F6),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _isFromLocal ? 'SQLite Lokal HP (Offline)' : 'Database API Server',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: _isFromLocal ? const Color(0xFF10B981) : const Color(0xFF3B82F6),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF132D27) : const Color(0xFFE8F8F0),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Icon(
+            Icons.calendar_today_outlined,
+            color: AppTheme.primary,
+            size: 22,
+          ),
         ),
-        InkWell(
-          onTap: _isLoading
-              ? null
-              : () async {
-                  await SyncManager().syncNow();
-                  await _fetchHistoryData();
-                },
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: isDark ? AppTheme.darkCard : Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _isLoading
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
-                      )
-                    : const Icon(Icons.refresh, size: 16, color: AppTheme.primary),
-                const SizedBox(width: 6),
-                Text(
-                  'Perbarui',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
-                  ),
-                ),
-              ],
-            ),
+        const SizedBox(width: 14),
+        Text(
+          'Riwayat',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : AppTheme.textDark,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildLiveStatusBanner(bool isDark) {
-    final ble = BleSimulatorService();
-    final isSimulating = ble.status == BleConnectionStatus.simulating;
-
-    if (!isSimulating && !_isFromLocal) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(top: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isSimulating ? Icons.sensors : Icons.sync,
-            size: 18,
-            color: AppTheme.primary,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isSimulating
-                      ? 'Mode Simulasi Aktif (Data Real-Time)'
-                      : 'Data Tersinkron Otomatis',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  isSimulating
-                      ? 'Data tersimpan otomatis tiap ${ble.intervalSeconds} dtk. Angka berubah mengikuti simulasi aktivitas.'
-                      : 'Data riwayat diperbarui secara berkala dari perangkat.',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                    height: 1.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          InkWell(
-            onTap: () {
-              setState(() {
-                _isAutoRefreshPaused = !_isAutoRefreshPaused;
-              });
-            },
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: _isAutoRefreshPaused
-                    ? const Color(0xFF10B981).withValues(alpha: 0.15)
-                    : (isDark ? const Color(0xFF1E293B) : Colors.white),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _isAutoRefreshPaused
-                      ? const Color(0xFF10B981)
-                      : (isDark ? AppTheme.darkCardBorder : AppTheme.greyLight),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _isAutoRefreshPaused ? Icons.play_arrow : Icons.pause,
-                    size: 13,
-                    color: _isAutoRefreshPaused ? const Color(0xFF10B981) : AppTheme.primary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _isAutoRefreshPaused ? 'Lanjutkan' : 'Jeda',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: _isAutoRefreshPaused ? const Color(0xFF10B981) : AppTheme.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
+  /// Tombol Toggle Harian / Mingguan (Pill Style)
   Widget _buildToggle(bool isDark) {
     return Container(
       padding: const EdgeInsets.all(4),
@@ -436,16 +352,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
         color: isDark ? AppTheme.darkCard : Colors.white,
         borderRadius: BorderRadius.circular(28),
         border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
+          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE5E7EB),
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           GestureDetector(
-            onTap: () => setState(() => _isWeekly = false),
+            onTap: () {
+              setState(() {
+                _isWeekly = false;
+                _calculateMetrics();
+              });
+            },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 9),
               decoration: BoxDecoration(
                 color: !_isWeekly ? AppTheme.primary : Colors.transparent,
                 borderRadius: BorderRadius.circular(24),
@@ -455,7 +376,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 style: TextStyle(
                   color: !_isWeekly
                       ? Colors.white
-                      : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                      : (isDark
+                            ? AppTheme.darkTextSecondary
+                            : AppTheme.textLight),
                   fontWeight: !_isWeekly ? FontWeight.bold : FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -463,9 +386,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
           ),
           GestureDetector(
-            onTap: () => setState(() => _isWeekly = true),
+            onTap: () {
+              setState(() {
+                _isWeekly = true;
+                _calculateMetrics();
+              });
+            },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 9),
               decoration: BoxDecoration(
                 color: _isWeekly ? AppTheme.primary : Colors.transparent,
                 borderRadius: BorderRadius.circular(24),
@@ -475,7 +403,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 style: TextStyle(
                   color: _isWeekly
                       ? Colors.white
-                      : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                      : (isDark
+                            ? AppTheme.darkTextSecondary
+                            : AppTheme.textLight),
                   fontWeight: _isWeekly ? FontWeight.bold : FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -487,14 +417,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
+  /// Grafik Paparan UV (perkiraan) dengan batang gradien
   Widget _buildChartCard(bool isDark) {
-    String chartTitle = _isWeekly ? 'Sinar UV Minggu Ini' : 'Sinar UV Hari Ini';
-    String subtitle = _isWeekly
-        ? 'Nilai tertinggi tiap hari (7 hari terakhir)'
-        : 'Seberapa kuat matahari tiap jam';
-
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : AppTheme.card,
         borderRadius: BorderRadius.circular(24),
@@ -505,63 +431,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.wb_sunny_outlined, size: 16, color: AppTheme.primary),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            chartTitle,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : AppTheme.textDark,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.2 : 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Tertinggi: ${_historyData.isEmpty ? "-" : _peakUv.toStringAsFixed(1)}',
-                  style: const TextStyle(
-                    color: Color(0xFFF59E0B),
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+          Text(
+            'Paparan UV (perkiraan)',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : AppTheme.textDark,
+              fontSize: 15,
+            ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           LayoutBuilder(
             builder: (context, constraints) {
               final chartWidth = constraints.maxWidth;
-              final barMaxHeight = (chartWidth * 0.38).clamp(90.0, 150.0);
+              final barMaxHeight = (chartWidth * 0.38).clamp(95.0, 140.0);
               return AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
                 child: _isWeekly
@@ -570,9 +452,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: _weeklyBars.map((bar) {
-                          final heightFactor = bar.$2 > 0 ? (bar.$2 / 12.0).clamp(0.12, 1.0) : 0.08;
-                          final valText = bar.$2 > 0 ? bar.$2.toStringAsFixed(1) : '-';
-                          return _buildBar(bar.$1, heightFactor, bar.$3, isDark, valText, barMaxHeight);
+                          final heightFactor = bar.$2 > 0
+                              ? (bar.$2 / 12.0).clamp(0.2, 1.0)
+                              : 0.12;
+                          return _buildBar(
+                            bar.$1,
+                            heightFactor,
+                            bar.$3,
+                            isDark,
+                            barMaxHeight,
+                          );
                         }).toList(),
                       )
                     : Row(
@@ -580,81 +469,45 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: _dailyBars.map((bar) {
-                          final heightFactor = bar.$2 > 0 ? (bar.$2 / 12.0).clamp(0.12, 1.0) : 0.08;
-                          final valText = bar.$2 > 0 ? bar.$2.toStringAsFixed(1) : '-';
-                          return _buildBar(bar.$1, heightFactor, bar.$3, isDark, valText, barMaxHeight);
+                          final heightFactor = bar.$2 > 0
+                              ? (bar.$2 / 12.0).clamp(0.2, 1.0)
+                              : 0.12;
+                          return _buildBar(
+                            bar.$1,
+                            heightFactor,
+                            bar.$3,
+                            isDark,
+                            barMaxHeight,
+                          );
                         }).toList(),
                       ),
               );
             },
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF101B2B) : const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, size: 13, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Tinggi batang menunjukkan nilai UV tertinggi pada periode tersebut. Hijau = Aman (< 3.0), Kuning = Waspada (3-7), Merah = Bahaya (≥ 8).',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBar(String label, double heightFactor, bool isActive, bool isDark, String valueLabel, [double barMaxHeight = 120.0]) {
+  Widget _buildBar(
+    String label,
+    double heightFactor,
+    bool isActive,
+    bool isDark,
+    double barMaxHeight,
+  ) {
     return Column(
       children: [
-        Text(
-          valueLabel,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-            color: isActive ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
-          ),
-        ),
-        const SizedBox(height: 6),
         Container(
-          width: 24,
+          width: 26,
           height: barMaxHeight * heightFactor,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: isActive
-                  ? [
-                      const Color(0xFF34D399),
-                      const Color(0xFF00B074),
-                    ]
-                  : [
-                      isDark ? const Color(0xFF264C46) : const Color(0xFFA7F3D0),
-                      isDark ? const Color(0xFF13755C) : const Color(0xFF059669),
-                    ],
+              colors: [const Color(0xFF6EE7B7), const Color(0xFF059669)],
             ),
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: isActive
-                ? [
-                    BoxShadow(
-                      color: AppTheme.primary.withValues(alpha: 0.3),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    )
-                  ]
-                : null,
+            borderRadius: BorderRadius.circular(13),
           ),
         ),
         const SizedBox(height: 10),
@@ -665,57 +518,91 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ? AppTheme.primary
                 : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
             fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-            fontSize: 11,
+            fontSize: 12,
           ),
         ),
       ],
     );
   }
 
+  /// Card Mini: Jam puncak, Udara buruk, Suhu tertinggi, Kualitas udara
   Widget _buildMetricCards(bool isDark) {
-    return Row(
+    final badAirText = _isWeekly
+        ? (_badAirCount > 0 ? '$_badAirCount hari' : '0 hari')
+        : (_badAirCount > 0 ? '$_badAirCount jam' : '0 jam');
+
+    final tempVal = _historyData.isEmpty
+        ? '-'
+        : '${_maxTemp.toStringAsFixed(1)}°C';
+
+    final vocVal = _historyData.isEmpty
+        ? '-'
+        : (_avgVoc >= 200 ? 'Waspada' : (_avgVoc >= 100 ? 'Sedang' : 'Bersih'));
+
+    return Column(
       children: [
-        Expanded(
-          child: _buildSmallCard(
-            'Puncak UV',
-            _historyData.isEmpty ? '-' : _peakUv.toStringAsFixed(1),
-            _peakUv >= 8 ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
-            isDark,
-            subtitle: _historyData.isEmpty
-                ? 'Belum Ada'
-                : (_peakUv >= 8 ? 'Ekstrem' : (_peakUv >= 6 ? 'Tinggi' : (_peakUv >= 3 ? 'Sedang' : 'Rendah'))),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: _buildMiniCard(
+                title: 'Jam puncak',
+                value: _peakHourRange,
+                valueColor: isDark ? Colors.white : AppTheme.textDark,
+                isDark: isDark,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: _buildMiniCard(
+                title: 'Udara buruk',
+                value: badAirText,
+                valueColor: const Color(0xFFD97706),
+                isDark: isDark,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: _buildSmallCard(
-            'Rata-rata Suhu',
-            _historyData.isEmpty ? '-' : '${_avgTemp.toStringAsFixed(1)}°C',
-            AppTheme.primary,
-            isDark,
-            subtitle: _historyData.isEmpty ? 'Kelembapan -' : 'Kelembapan ~${_avgHum.toStringAsFixed(0)}%',
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: _buildSmallCard(
-            'Kualitas Udara',
-            _historyData.isEmpty ? '-' : '$_avgVoc',
-            _avgVoc >= 200 ? const Color(0xFFEF4444) : AppTheme.primary,
-            isDark,
-            subtitle: _historyData.isEmpty ? 'Belum Ada' : (_avgVoc >= 200 ? 'Waspada' : 'Bersih'),
-          ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: _buildMiniCard(
+                title: 'Suhu tertinggi',
+                value: tempVal,
+                valueColor: _maxTemp >= 35.0
+                    ? const Color(0xFFEF4444)
+                    : (_maxTemp >= 30.0 ? const Color(0xFFF59E0B) : AppTheme.primary),
+                isDark: isDark,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: _buildMiniCard(
+                title: 'Kualitas udara',
+                value: vocVal,
+                valueColor: _avgVoc >= 200
+                    ? const Color(0xFFEF4444)
+                    : (_avgVoc >= 100 ? const Color(0xFFF59E0B) : const Color(0xFF10B981)),
+                isDark: isDark,
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildSmallCard(String title, String value, Color valueColor, bool isDark, {String? subtitle}) {
+  Widget _buildMiniCard({
+    required String title,
+    required String value,
+    required Color valueColor,
+    required bool isDark,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
         ),
@@ -727,35 +614,183 @@ class _HistoryScreenState extends State<HistoryScreen> {
             title,
             style: TextStyle(
               color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             value,
             style: TextStyle(
               color: valueColor,
-              fontSize: 20,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               height: 1.0,
             ),
           ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              style: TextStyle(
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                fontSize: 11,
-              ),
-            ),
-          ],
         ],
       ),
     );
   }
 
+  /// Card Rutinitas Proteksi (Pengganti 'Kepatuhan')
+  Widget _buildProtectionRoutineCard(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.card,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.check_circle_outline,
+                color: AppTheme.primary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Rutinitas',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildRoutineRow(
+            label: 'Oles ulang tepat waktu',
+            percent: _sunscreenAdherence,
+            isDark: isDark,
+          ),
+          const SizedBox(height: 18),
+          _buildRoutineRow(
+            label: 'Target minum tercapai',
+            percent: _waterAdherence,
+            isDark: isDark,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoutineRow({
+    required String label,
+    required int percent,
+    required bool isDark,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isDark ? Colors.white : AppTheme.textDark,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            Text(
+              '$percent%',
+              style: const TextStyle(
+                color: AppTheme.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: (percent / 100.0).clamp(0.0, 1.0),
+            backgroundColor: isDark
+                ? const Color(0xFF101B2B)
+                : const Color(0xFFE5E7EB),
+            valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+            minHeight: 6.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Card Tips minggu ini / Tips hari ini (Banner Hijau Muda Rapi)
+  Widget _buildTipsCard(bool isDark) {
+    final title = _isWeekly ? 'Tips minggu ini' : 'Tips hari ini';
+
+    String tipDescription;
+    if (_historyData.isEmpty) {
+      tipDescription =
+          'Paparan tertinggi jam 12. Coba istirahat di tempat teduh.';
+    } else if (_peakUv >= 8.0) {
+      tipDescription =
+          'Paparan tertinggi jam $_peakHour. Lindungi kulit dan istirahat di tempat teduh.';
+    } else if (_peakUv >= 4.0) {
+      tipDescription =
+          'Paparan tertinggi jam $_peakHour. Coba istirahat di tempat teduh.';
+    } else {
+      tipDescription = 'Kondisi sinar stabil. Tetap jaga hidrasi dan oleskan sunscreen saat keluar.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF132D27) : const Color(0xFFE8F8F0),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1A453B) : const Color(0xFFC7EBD9),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.lightbulb_outline,
+                color: Color(0xFF059669),
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF059669),
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            tipDescription,
+            style: TextStyle(
+              color: isDark ? const Color(0xFFA7F3D0) : const Color(0xFF047857),
+              fontSize: 13,
+              height: 1.4,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Section Log Rekaman Terbaru + Tombol Detail
   Widget _buildRecentLogsSection(bool isDark) {
     final recentItems = _historyData.take(5).toList();
 
@@ -763,7 +798,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
         ),
@@ -790,23 +825,50 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     '5 data pembacaan sensor terakhir yang tersimpan',
                     style: TextStyle(
                       fontSize: 11,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                      color: isDark
+                          ? AppTheme.darkTextSecondary
+                          : AppTheme.textLight,
                     ),
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '${_historyData.length} Data',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.primary,
-                    fontWeight: FontWeight.bold,
+              InkWell(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          HistoryDetailScreen(initialData: _historyData),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Text(
+                        'Lihat Detail',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(
+                        Icons.arrow_forward_ios,
+                        size: 10,
+                        color: AppTheme.primary,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -827,7 +889,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 child: Text(
                   'Belum ada rekaman sensor yang tersimpan.',
                   style: TextStyle(
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                    color: isDark
+                        ? AppTheme.darkTextSecondary
+                        : AppTheme.textLight,
                     fontSize: 13,
                   ),
                 ),
@@ -851,7 +915,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         } else if (diff.inHours < 1) {
           timeStr = '${diff.inMinutes} mnt lalu';
         } else {
-          timeStr = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+          timeStr =
+              '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
         }
       } catch (_) {}
     }
@@ -872,7 +937,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.access_time, size: 14, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+              Icon(
+                Icons.access_time,
+                size: 14,
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+              ),
               const SizedBox(width: 6),
               Text(
                 timeStr,
@@ -886,11 +955,38 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
           Row(
             children: [
-              _buildBadgeWithIcon(Icons.wb_sunny_outlined, 'UV ${uv.toStringAsFixed(1)}', uv >= 8 ? const Color(0xFFEF4444) : (uv >= 3 ? const Color(0xFFF59E0B) : const Color(0xFF10B981)), isDark),
+              _buildBadgeWithIcon(
+                Icons.wb_sunny_outlined,
+                'UV ${uv.toStringAsFixed(1)}',
+                uv >= 8
+                    ? const Color(0xFFEF4444)
+                    : (uv >= 3
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF10B981)),
+                isDark,
+              ),
               const SizedBox(width: 6),
-              _buildBadgeWithIcon(Icons.thermostat_outlined, '${temp.toStringAsFixed(1)}°C', temp >= 35 ? const Color(0xFFEF4444) : (temp >= 28 ? const Color(0xFFF59E0B) : const Color(0xFF10B981)), isDark),
+              _buildBadgeWithIcon(
+                Icons.thermostat_outlined,
+                '${temp.toStringAsFixed(1)}°C',
+                temp >= 35
+                    ? const Color(0xFFEF4444)
+                    : (temp >= 28
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF10B981)),
+                isDark,
+              ),
               const SizedBox(width: 6),
-              _buildBadgeWithIcon(Icons.air, 'VOC $voc', voc >= 250 ? const Color(0xFFEF4444) : (voc >= 100 ? const Color(0xFFF59E0B) : const Color(0xFF10B981)), isDark),
+              _buildBadgeWithIcon(
+                Icons.air,
+                'VOC $voc',
+                voc >= 250
+                    ? const Color(0xFFEF4444)
+                    : (voc >= 100
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF10B981)),
+                isDark,
+              ),
             ],
           ),
         ],
@@ -898,7 +994,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildBadgeWithIcon(IconData icon, String text, Color color, bool isDark) {
+  Widget _buildBadgeWithIcon(
+    IconData icon,
+    String text,
+    Color color,
+    bool isDark,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -916,186 +1017,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
               color: color,
               fontSize: 10,
               fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildComplianceCard(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.shield_outlined, color: AppTheme.primary, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Waktu dalam Kondisi Aman',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : AppTheme.textDark,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Persentase durasi Anda berada di lingkungan terlindung dan sehat.',
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-            ),
-          ),
-          const SizedBox(height: 18),
-          _buildProgressRow(
-            'Aman dari Radiasi UV (< 3.0 UVI)',
-            '$_safeUvPercent%',
-            _safeUvPercent / 100.0,
-            isDark,
-          ),
-          const SizedBox(height: 18),
-          _buildProgressRow(
-            'Nyaman dari Suhu Panas (< 32°C)',
-            '$_comfortTempPercent%',
-            _comfortTempPercent / 100.0,
-            isDark,
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF101B2B) : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.help_outline, size: 15, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Contoh: $_safeUvPercent% berarti $_safeUvPercent% dari seluruh waktu pengukuran Anda berada di zona aman dari paparan radiasi matahari.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textDark,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProgressRow(String title, String percentText, double percent, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                color: isDark ? Colors.white : AppTheme.textDark,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            Text(
-              percentText,
-              style: const TextStyle(
-                color: AppTheme.primary,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(5),
-          child: LinearProgressIndicator(
-            value: percent,
-            backgroundColor: isDark ? const Color(0xFF101B2B) : AppTheme.greyLight,
-            valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
-            minHeight: 7,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTipsCard(bool isDark) {
-    String tipsText;
-    if (_historyData.isEmpty) {
-      tipsText = 'Belum ada data rekaman sensor. Hubungkan perangkat Klimo atau jalankan simulasi untuk memulai pemantauan lingkungan.';
-    } else if (_peakUv >= 8) {
-      tipsText = 'Terdeteksi paparan UV puncak ${_peakUv.toStringAsFixed(1)} (Ekstrem). Disarankan menggunakan tabir surya SPF 50+, pakaian tertutup, dan hindari paparan matahari langsung pada jam terik.';
-    } else if (_peakUv >= 6) {
-      tipsText = 'Paparan UV puncak ${_peakUv.toStringAsFixed(1)} (Tinggi). Gunakan pelindung topi atau kacamata hitam, serta oleskan ulang tabir surya secara berkala.';
-    } else if (_avgTemp >= 34) {
-      tipsText = 'Rata-rata suhu lingkungan tergolong panas (${_avgTemp.toStringAsFixed(1)}°C). Pastikan minum air putih lebih sering dan istirahat di tempat teduh.';
-    } else {
-      tipsText = 'Kondisi lingkungan sekitar Anda secara keseluruhan stabil dan aman. Pertahankan kebiasaan perlindungan saat beraktivitas di luar.';
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : const Color(0xFFF0FDF4),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFDCFCE7),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.lightbulb_outline, color: AppTheme.primary, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Evaluasi & Saran Kesehatan',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : AppTheme.primary,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Rangkuman praktis berdasarkan seluruh data yang tercatat.',
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF059669),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            tipsText,
-            style: TextStyle(
-              color: isDark ? AppTheme.darkTextSecondary : AppTheme.primary,
-              fontSize: 13,
-              height: 1.45,
             ),
           ),
         ],

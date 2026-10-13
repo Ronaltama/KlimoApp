@@ -9,12 +9,13 @@ import 'screens/setup/skin_type_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/uv_detail_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (!kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
+  await AppTheme.initTheme();
   runApp(const MyApp());
 }
 

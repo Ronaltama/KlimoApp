@@ -244,9 +244,9 @@ class BleSimulatorService {
       _simBattery--;
     }
 
-    // GPS area Jakarta Pusat (bergeser mikro)
-    final lat = -6.200000 + (_random.nextDouble() - 0.5) * 0.0005;
-    final lng = 106.816666 + (_random.nextDouble() - 0.5) * 0.0005;
+    // GPS area Jakarta Pusat (bergeser dinamis mencakup area lingkungan sekitar)
+    final lat = -6.200000 + (_random.nextDouble() - 0.5) * 0.003;
+    final lng = 106.816666 + (_random.nextDouble() - 0.5) * 0.003;
 
     return TelemetryRecord(
       macAddress: _deviceMac,

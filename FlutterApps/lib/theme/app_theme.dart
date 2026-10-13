@@ -1,14 +1,51 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AppTheme {
-  // Theme state notifier
-  static final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.dark);
+  static const String _prefThemeKey = 'klimo_app_theme_mode';
+
+  // Theme state notifier (default: ThemeMode.light)
+  static final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.light);
 
   static bool get isDark => themeModeNotifier.value == ThemeMode.dark;
 
-  static void toggleTheme() {
-    themeModeNotifier.value =
-        themeModeNotifier.value == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+  /// Inisialisasi tema tersimpan dari SharedPreferences saat aplikasi pertama dibuka
+  static Future<void> initTheme() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedMode = prefs.getString(_prefThemeKey);
+      if (savedMode == 'dark') {
+        themeModeNotifier.value = ThemeMode.dark;
+      } else if (savedMode == 'system') {
+        themeModeNotifier.value = ThemeMode.system;
+      } else {
+        // Default awal aplikasi adalah mode terang (Light)
+        themeModeNotifier.value = ThemeMode.light;
+      }
+    } catch (_) {
+      themeModeNotifier.value = ThemeMode.light;
+    }
+  }
+
+  /// Mengubah tema dan menyimpannya secara persisten ke SharedPreferences
+  static Future<void> setTheme(ThemeMode mode) async {
+    themeModeNotifier.value = mode;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String modeStr = 'light';
+      if (mode == ThemeMode.dark) {
+        modeStr = 'dark';
+      } else if (mode == ThemeMode.system) {
+        modeStr = 'system';
+      }
+      await prefs.setString(_prefThemeKey, modeStr);
+    } catch (_) {}
+  }
+
+  /// Toggle cepat antara tema terang & gelap dan simpan ke SharedPreferences
+  static Future<void> toggleTheme() async {
+    final nextMode = themeModeNotifier.value == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    await setTheme(nextMode);
   }
 
   // Brand & Accent Colors

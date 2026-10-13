@@ -17,6 +17,13 @@ class Telemetry extends Model
         'longitude',
     ];
 
+    protected $appends = ['mac_address'];
+
+    public function getMacAddressAttribute()
+    {
+        return $this->device?->mac_address ?? 'KLIMO-DEV';
+    }
+
     public function device()
     {
         return $this->belongsTo(Device::class);

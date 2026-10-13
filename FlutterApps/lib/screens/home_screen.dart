@@ -18,6 +18,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   TelemetryRecord? _telemetryRecord;
   String _userName = 'Budi';
+  bool _isDemoMode = false;
   Timer? _uiRefreshTimer;
   Timer? _countdownTicker;
   StreamSubscription<TelemetryRecord>? _bleSubscription;
@@ -27,8 +28,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final _sync = SyncManager();
 
   BleConnectionStatus _bleStatus = BleConnectionStatus.disconnected;
-  SyncStatus _syncStatus = SyncStatus.idle;
-  int _pendingSync = 0;
 
   // State Pelindung Matahari (Sunscreen) & Hidrasi (Minum)
   DateTime? _lastSunscreenTime;
@@ -42,13 +41,19 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadSunscreenAndDrinkState();
     _initOfflineFirst();
 
-    // Ticker periodik tiap 5 detik agar countdown timer oles sunscreen & minum terbarui otomatis
-    _countdownTicker = Timer.periodic(const Duration(seconds: 5), (_) {
+    // Ticker periodik tiap 1 detik agar countdown timer oles sunscreen & minum terbarui otomatis
+    _countdownTicker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
   }
 
   Future<void> _refreshData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isDemo = prefs.getBool('demo_system_mode') ?? false;
+    if (mounted) {
+      setState(() => _isDemoMode = isDemo);
+    }
+
     await _sync.syncNow();
     final cached = await LocalDataService.getLatest();
     if (cached != null && mounted) {
@@ -87,23 +92,25 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) setState(() => _telemetryRecord = record);
     });
     _statusSubscription = _ble.statusStream.listen((status) {
-      if (mounted) setState(() => _bleStatus = status);
+      if (mounted) {
+        setState(() {
+          _bleStatus = status;
+          if (status == BleConnectionStatus.simulating) {
+            _isDemoMode = true;
+          }
+        });
+      }
     });
 
-    // 3. Subscribe ke SyncManager untuk status cloud sync
-    _sync.statusStream.listen((s) {
-      if (mounted) setState(() => _syncStatus = s);
-    });
-    _sync.pendingCountStream.listen((c) {
-      if (mounted) setState(() => _pendingSync = c);
-    });
-
-    // 4. Inisialisasi sync manager (auto-sync tiap 30 detik jika ada internet)
+    // 3. Inisialisasi sync manager (auto-sync tiap 30 detik jika ada internet)
     _sync.initialize();
 
     // 5. Periksa apakah mode demo diaktifkan dari Pengaturan Profil
     final prefs = await SharedPreferences.getInstance();
-    final isDemo = prefs.getBool('demo_system_mode') ?? true;
+    final isDemo = prefs.getBool('demo_system_mode') ?? false;
+    if (mounted) {
+      setState(() => _isDemoMode = isDemo);
+    }
     if (isDemo) {
       _ble.startSimulation(mode: BleSimMode.auto);
     } else {
@@ -132,96 +139,6 @@ class _HomeScreenState extends State<HomeScreen> {
       'longitude': _telemetryRecord!.longitude,
       'created_at': _telemetryRecord!.timestamp.toIso8601String(),
     };
-  }
-
-  String _getConnectionLabel() {
-    switch (_bleStatus) {
-      case BleConnectionStatus.simulating:
-        return 'Mode Demo (Simulasi)';
-      case BleConnectionStatus.connected:
-        return 'Gelang Terhubung';
-      case BleConnectionStatus.scanning:
-        return 'Mencari Gelang...';
-      case BleConnectionStatus.disconnected:
-        return 'Gelang Belum Terhubung';
-    }
-  }
-
-  String _getSyncText() {
-    if (_telemetryRecord == null) return 'MENUNGGU DATA';
-    switch (_bleStatus) {
-      case BleConnectionStatus.scanning:
-        return 'MENCARI...';
-      case BleConnectionStatus.connected:
-        return 'SENSOR LANGSUNG';
-      case BleConnectionStatus.simulating:
-        final diff = DateTime.now().difference(_telemetryRecord!.timestamp);
-        if (diff.inSeconds < 5) return 'BARU SAJA';
-        if (diff.inSeconds < 60) return '${diff.inSeconds} DTK LALU';
-        if (diff.inMinutes < 60) return '${diff.inMinutes} MNT LALU';
-        return '${diff.inHours} JAM LALU';
-      case BleConnectionStatus.disconnected:
-        return 'TERSIMPAN DI HP';
-    }
-  }
-
-  Color _getSyncColor() {
-    switch (_bleStatus) {
-      case BleConnectionStatus.simulating:
-      case BleConnectionStatus.connected:
-        return AppTheme.primary;
-      case BleConnectionStatus.scanning:
-        return Colors.orange;
-      case BleConnectionStatus.disconnected:
-        return Colors.grey;
-    }
-  }
-
-  IconData _getSyncIcon() {
-    switch (_bleStatus) {
-      case BleConnectionStatus.simulating:
-      case BleConnectionStatus.connected:
-        return Icons.bluetooth_connected;
-      case BleConnectionStatus.scanning:
-        return Icons.bluetooth_searching;
-      case BleConnectionStatus.disconnected:
-        return Icons.storage_outlined;
-    }
-  }
-
-  Widget _buildCloudStatusBadge(bool isDark) {
-    final (icon, color, text) = _getCloudStatusInfo(isDark);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: TextStyle(
-            fontSize: 11,
-            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-          ),
-        ),
-      ],
-    );
-  }
-
-  (IconData, Color, String) _getCloudStatusInfo(bool isDark) {
-    final defaultColor = isDark ? AppTheme.darkTextSecondary : AppTheme.textLight;
-    if (_pendingSync == 0) {
-      return (Icons.cloud_done_outlined, AppTheme.primary, 'Tersinkronisasi');
-    }
-    switch (_syncStatus) {
-      case SyncStatus.syncing:
-        return (Icons.cloud_upload_outlined, AppTheme.primary, 'Mengunggah...');
-      case SyncStatus.noInternet:
-        return (Icons.cloud_off_outlined, defaultColor, '$_pendingSync tertahan');
-      case SyncStatus.error:
-        return (Icons.error_outline, const Color(0xFFEF4444), 'Gagal sync');
-      default:
-        return (Icons.schedule, defaultColor, '$_pendingSync menunggu');
-    }
   }
 
   // --- Logika Tabir Surya (Sunscreen) ---
@@ -256,10 +173,10 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const Icon(Icons.wb_sunny_rounded, color: Colors.white, size: 20),
             const SizedBox(width: 10),
-            Expanded(
+            const Expanded(
               child: Text(
-                'Tabir surya dicatat! Proteksi kulit aktif selama $_effectiveSunscreenMinutes menit ke depan.',
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                'Sunscreen dicatat',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
               ),
             ),
           ],
@@ -314,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Bagus! Asupan gelas ke-$newCount tercatat ($newCount/$_targetGlasses gelas). Tubuh tetap segar & terhidrasi.',
+                'Minum dicatat ($newCount/$_targetGlasses)',
                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
               ),
             ),
@@ -370,9 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(context, isDark),
-              const SizedBox(height: 12),
-              _buildConnectionBanner(isDark),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               _buildWaspadaCard(isDark),
               const SizedBox(height: 16),
               Row(
@@ -401,54 +316,10 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 }
 
-  /// Banner status koneksi BLE + Cloud Sync
-  Widget _buildConnectionBanner(bool isDark) {
-    final bleColor = _getSyncColor();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
-        ),
-      ),
-      child: Row(
-        children: [
-          // Status BLE
-          Icon(_getSyncIcon(), size: 16, color: bleColor),
-          const SizedBox(width: 8),
-          Text(
-            _getConnectionLabel(),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: bleColor,
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Indikator berkedip (dot animasi)
-          if (_bleStatus == BleConnectionStatus.simulating ||
-              _bleStatus == BleConnectionStatus.connected)
-            Container(
-              width: 7, height: 7,
-              decoration: BoxDecoration(
-                color: AppTheme.primary,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(color: AppTheme.primary.withValues(alpha: 0.5), blurRadius: 6),
-                ],
-              ),
-            ),
-          const Spacer(),
-          // Status Cloud Sync
-          _buildCloudStatusBadge(isDark),
-        ],
-      ),
-    );
-  }
-
   Widget _buildHeader(BuildContext context, bool isDark) {
+    final isBleActive = _bleStatus == BleConnectionStatus.connected ||
+        _bleStatus == BleConnectionStatus.simulating;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -476,7 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    _userName,
+                    _isDemoMode ? 'Demo Aplikasi' : _userName,
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -490,45 +361,51 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         Row(
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Row(
+            // Status Perangkat: Icon Bluetooth (berwarna jika on, abu-abu jika off) + Baterai Wearable
+            InkWell(
+              onTap: () => Navigator.pushNamed(context, '/device'),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.darkCard : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      _getSyncIcon(),
-                      size: 13,
-                      color: _getSyncColor(),
+                      isBleActive ? Icons.bluetooth : Icons.bluetooth_disabled,
+                      size: 15,
+                      color: isBleActive
+                          ? AppTheme.primary
+                          : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.battery_std_rounded,
+                      size: 15,
+                      color: isBleActive
+                          ? AppTheme.primary
+                          : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                    ),
+                    const SizedBox(width: 3),
                     Text(
-                      _getSyncText(),
+                      isBleActive ? '${_ble.batteryPercentage}%' : '--%',
                       style: TextStyle(
-                        fontSize: 10,
-                        color: _getSyncColor(),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.battery_std_rounded, size: 14, color: AppTheme.primary),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${_ble.batteryPercentage}%',
-                      style: const TextStyle(
                         fontSize: 12,
-                        color: AppTheme.primary,
                         fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : AppTheme.textDark,
                       ),
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Container(
               padding: const EdgeInsets.all(9),
               decoration: BoxDecoration(
@@ -571,7 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (voc >= 250) {
           statusDesc = 'Konsentrasi gas VOC tinggi ($voc). Hindari polusi, gunakan masker respirator.';
         } else if (uv >= 8.0) {
-          statusDesc = 'Radiasi UV sangat ekstrem (${uv.toStringAsFixed(1)}). Wajib tabir surya SPF 50+ & cari tempat teduh.';
+          statusDesc = 'Radiasi UV sangat ekstrem (${uv.toStringAsFixed(1)}). Wajib sunscreen SPF 50+ & cari tempat teduh.';
         } else {
           statusDesc = 'Suhu panas ekstrem (${temp.toStringAsFixed(1)}°C). Waspada dehidrasi akut dan sengatan panas.';
         }
@@ -725,34 +602,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildUVCard(BuildContext context, bool isDark) {
     double uv = telemetryData?['uv_index']?.toDouble() ?? 0.0;
-    String uvText = uv.toStringAsFixed(1);
+    String uvText = uv >= 10.0 ? uv.toStringAsFixed(0) : uv.toStringAsFixed(1);
     
     String uvSubtitle;
     Color uvColor;
     if (uv >= 8.0) {
-      uvSubtitle = 'Ekstrem (Wajib Teduh)';
+      uvSubtitle = 'Sangat tinggi';
       uvColor = const Color(0xFFEF4444);
     } else if (uv >= 6.0) {
-      uvSubtitle = 'Tinggi (Bahaya Kulit)';
+      uvSubtitle = 'Tinggi';
       uvColor = const Color(0xFFF59E0B);
     } else if (uv >= 3.0) {
-      uvSubtitle = 'Sedang (Pakai Topi)';
+      uvSubtitle = 'Sedang';
       uvColor = const Color(0xFFEAB308);
     } else {
-      uvSubtitle = 'Rendah (Aman Nyaman)';
+      uvSubtitle = 'Nyaman';
       uvColor = AppTheme.primary;
     }
     
     return _buildStatusCard(
-      title: 'SINAR UV (MATAHARI)',
+      title: 'UV · LUX',
       titleColor: isDark ? AppTheme.darkTextSecondary : AppTheme.primary,
       value: uvText,
       subtitle: uvSubtitle,
       progressValue: (uv / 11.0).clamp(0.0, 1.0),
       progressColor: uvColor,
-      bottomText: _bleStatus == BleConnectionStatus.connected
-          ? 'Sensor Gelang Langsung'
-          : 'Data Simulasi Demo',
       isDark: isDark,
       onTap: () {
         Navigator.push(
@@ -765,25 +639,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildGasCard(bool isDark) {
     int voc = telemetryData?['voc'] ?? 0;
-    String status = voc >= 250 ? 'Bahaya' : (voc >= 120 ? 'Waspada' : 'Bersih');
-    String vocSubtitle = voc >= 250 
-        ? 'Polusi tinggi ($voc)' 
-        : (voc >= 120 ? 'Polusi sedang ($voc)' : 'Udara segar ($voc)');
+    String status = voc >= 250 ? 'Bahaya' : (voc >= 120 ? 'Sedang' : 'Bersih');
+    String vocSubtitle = 'Indeks $voc';
     Color gasColor = voc >= 250 
         ? const Color(0xFFEF4444) 
         : (voc >= 120 ? const Color(0xFFF59E0B) : AppTheme.primary);
 
     return _buildStatusCard(
-      title: 'KUALITAS UDARA',
+      title: 'GAS VOC',
       titleColor: isDark ? AppTheme.darkTextSecondary : AppTheme.primary,
       value: status,
       valueSize: 28,
       subtitle: vocSubtitle,
       progressValue: (voc / 500.0).clamp(0.0, 1.0),
       progressColor: gasColor,
-      bottomText: _bleStatus == BleConnectionStatus.connected
-          ? 'Sensor Gelang Langsung'
-          : 'Data Simulasi Demo',
       isDark: isDark,
     );
   }
@@ -796,7 +665,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required String subtitle,
     required double progressValue,
     required Color progressColor,
-    required String bottomText,
+    String? bottomText,
     required bool isDark,
     VoidCallback? onTap,
   }) {
@@ -851,14 +720,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 minHeight: 5,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              bottomText,
-              style: TextStyle(
-                fontSize: 11,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+            if (bottomText != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                bottomText,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -890,7 +761,7 @@ class _HomeScreenState extends State<HomeScreen> {
       borderClr = const Color(0xFFFBBF24);
       bgClr = isDark ? const Color(0xFF261D12) : const Color(0xFFFFFBEB);
       boldText = 'Radiasi UV ekstrem (${uv.toStringAsFixed(1)})— ';
-      detailText = 'Disarankan berteduh dan aplikasikan ulang tabir surya SPF 50+.';
+      detailText = 'Disarankan berteduh dan aplikasikan ulang sunscreen SPF 50+.';
     } else if (temp >= 35.0) {
       bannerIcon = Icons.thermostat;
       iconColor = const Color(0xFFF97316);
@@ -952,14 +823,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSunscreenCard(bool isDark) {
-    final uv = telemetryData?['uv_index']?.toDouble() ?? 0.0;
     final remaining = _sunscreenRemainingTime;
     final isActive = _isSunscreenActive;
 
     String val;
-    String sub;
-    String btnText;
-    bool isOutlined;
+    String sub = 'lagi';
+    String btnText = 'Sudah oles';
+    bool isOutlined = false;
     double progress;
     Color progressColor;
 
@@ -967,27 +837,21 @@ class _HomeScreenState extends State<HomeScreen> {
       if (remaining.inMinutes >= 60) {
         val = '${remaining.inHours}j ${remaining.inMinutes % 60}m';
       } else {
-        val = '${remaining.inMinutes} mnt';
+        val = '${remaining.inMinutes}:${(remaining.inSeconds % 60).toString().padLeft(2, '0')}';
       }
-      sub = 'Proteksi aktif • Sisa waktu';
-      btnText = 'Oles Ulang';
-      isOutlined = true;
+      sub = 'lagi';
       progress = (remaining.inSeconds / (_effectiveSunscreenMinutes * 60)).clamp(0.0, 1.0);
       progressColor = remaining.inMinutes < 20 ? const Color(0xFFEF4444) : const Color(0xFF10B981);
     } else {
-      val = uv >= 8.0 ? 'SPF 50+' : (uv >= 3.0 ? 'SPF 30+' : 'Perlu Oles');
-      sub = uv >= 8.0 
-          ? 'UV ekstrem! Oleskan sekarang' 
-          : (uv >= 3.0 ? 'Belum dioles • Butuh pelindung' : 'Kondisi UV aman saat ini');
-      btnText = 'Sudah Oles';
-      isOutlined = false;
+      val = '00:00';
+      sub = 'perlu oles';
       progress = 0.0;
       progressColor = const Color(0xFFEF4444);
     }
 
     return _buildActionCard(
       icon: Icons.wb_sunny_outlined,
-      title: 'Tabir Surya',
+      title: 'Sunscreen',
       value: val,
       subtitle: sub,
       buttonText: btnText,
@@ -1000,38 +864,51 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMinumCard(bool isDark) {
-    final temp = telemetryData?['temperature']?.toDouble() ?? 0.0;
     final remaining = _drinkRemainingTime;
     final isDue = _isDrinkDue;
 
     String val;
-    String sub;
-    String btnText;
-    bool isOutlined;
+    String btnText = 'Sudah minum';
+    bool isOutlined = true;
     double progress;
     Color progressColor;
 
     if (isDue) {
-      val = 'Waktunya!';
-      sub = temp >= 35.0 ? 'Suhu terik, segera minum air' : 'Jaga cairan, minum sekarang';
-      btnText = 'Sudah Minum';
-      isOutlined = false;
+      val = '0 mnt';
       progress = 1.0;
       progressColor = const Color(0xFFEF4444);
     } else {
       val = '${remaining.inMinutes} mnt';
-      sub = '$_waterGlassesCount/$_targetGlasses gelas hari ini';
-      btnText = 'Minum Lagi';
-      isOutlined = true;
-      progress = (_waterGlassesCount / _targetGlasses).clamp(0.0, 1.0);
+      progress = (remaining.inSeconds / (_hydrationIntervalMinutes * 60)).clamp(0.0, 1.0);
       progressColor = AppTheme.primary;
     }
 
+    final glassIndicator = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.local_drink_rounded,
+          size: 14,
+          color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+        ),
+        const SizedBox(width: 3),
+        Text(
+          '$_waterGlassesCount/$_targetGlasses',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+          ),
+        ),
+      ],
+    );
+
     return _buildActionCard(
-      icon: Icons.local_drink_outlined,
-      title: 'Minum Air',
+      icon: Icons.water_drop_outlined,
+      title: 'Minum',
       value: val,
-      subtitle: sub,
+      subtitle: '',
+      trailingSubtitle: glassIndicator,
       buttonText: btnText,
       isOutlined: isOutlined,
       isDark: isDark,
@@ -1046,6 +923,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required String title,
     required String value,
     required String subtitle,
+    Widget? trailingSubtitle,
     required String buttonText,
     required bool isOutlined,
     required bool isDark,
@@ -1090,15 +968,21 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            subtitle,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.3,
-              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-            ),
+          Row(
+            children: [
+              if (subtitle.isNotEmpty)
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.3,
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                  ),
+                ),
+              if (subtitle.isNotEmpty && trailingSubtitle != null)
+                const SizedBox(width: 6),
+              ?trailingSubtitle,
+            ],
           ),
           if (progress != null) ...[
             const SizedBox(height: 10),
