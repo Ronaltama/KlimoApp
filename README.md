@@ -10,6 +10,16 @@ Monorepo resmi untuk proyek **Klimo Wearth** (*Personal Weather & Wearable Micro
 
 ---
 
+## 📲 Unduh Aplikasi Android (APK Release)
+
+Untuk mencoba aplikasi secara langsung di smartphone Android tanpa perlu melakukan kompilasi manual:
+
+* 📦 **Berkas APK**: [`release/KlimoApp-release.apk`](release/KlimoApp-release.apk)
+* 📖 **Panduan Pasang**: [Baca Panduan Instalasi di release/README.md](release/README.md)
+* ⚡ **Ukuran**: ~60.7 MB (Universal APK, Android 6.0+)
+
+---
+
 ## 💡 Tentang Solusi: Klimo Wearth
 
 Pekerja lapangan, kurir, atlet, dan masyarakat urban sering kali terpapar bahaya radiasi sinar UV ekstrem, suhu panas menyengat (*heat exhaustion*), serta akumulasi polusi gas beracun tanpa alat ukur objektif di tubuh mereka. 
@@ -113,6 +123,9 @@ sequenceDiagram
 
 ```text
 KlimoApp/
+├── release/                 # Berkas Paket Instalasi APK Android Siap Pakai
+│   ├── KlimoApp-release.apk # Production APK (~60.7 MB)
+│   └── README.md            # Panduan instalasi cepat ke HP Android
 ├── Backend/                 # Laravel 13 API Backend
 │   ├── app/
 │   │   ├── Http/Controllers/Api/  # AuthController & TelemetryController
