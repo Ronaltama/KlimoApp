@@ -18,13 +18,16 @@ Pastikan peralatan berikut tersedia di komputer Anda:
 
 ---
 
-## 2. Cara Cepat: Skrip Demo Terpadu (`run_demo.sh`)
+## 2. Cara Cepat: Skrip Demo Terpadu (`run_demo.sh` & `run_demo.bat`)
 
 Gunakan skrip terpadu di root direktori untuk menjalankan berbagai skenario:
 
 ```bash
-cd /home/ronaltama/PROJECT/KlimoApp
+# Di Linux / macOS:
 ./run_demo.sh
+
+# Di Windows:
+run_demo.bat
 ```
 
 Menu interaktif yang tersedia:
