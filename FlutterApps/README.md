@@ -98,11 +98,19 @@ flutter run -d linux
 flutter run -d android
 ```
 
-### 3. Kompilasi APK Production (Release)
+### 3. Kompilasi APK Android Production (Release)
 ```bash
 flutter build apk --release
 ```
 Hasil berkas biner APK akan berada di `build/app/outputs/flutter-apk/app-release.apk` atau dapat langsung diunduh dari folder [`release/`](../release/).
+
+### 4. Kompilasi iOS Production (Release via CI/CD)
+Kompilasi iOS dilakukan otomatis melalui **GitHub Actions** menggunakan macOS Runner (`macos-14`). Workflow dapat dijalankan langsung di tab Actions repositori melalui [`.github/workflows/build-ios.yml`](../.github/workflows/build-ios.yml).
+
+Jika Anda berada di komputer macOS dengan Xcode:
+```bash
+flutter build ios --release --no-codesign
+```
 
 ---
 

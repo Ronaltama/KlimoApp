@@ -1,6 +1,7 @@
 # KlimoApp (Klimo Wearth) 🌦️
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
+[![iOS](https://img.shields.io/badge/iOS-14%2B-black?logo=apple&logoColor=white)](https://apple.com)
 [![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20?logo=laravel&logoColor=white)](https://laravel.com)
 [![ESP32-C3](https://img.shields.io/badge/Hardware-ESP32--C3-E7352C?logo=espressif&logoColor=white)](https://www.espressif.com)
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Core-orange?logo=platformio&logoColor=white)](https://platformio.org)
@@ -10,13 +11,13 @@ Monorepo resmi untuk proyek **Klimo Wearth** (*Personal Weather & Wearable Micro
 
 ---
 
-## 📲 Unduh Aplikasi Android (APK Release)
+## 📲 Unduh Aplikasi & CI/CD Pipeline
 
-Untuk mencoba aplikasi secara langsung di smartphone Android tanpa perlu melakukan kompilasi manual:
+Untuk mencoba aplikasi di smartphone secara langsung:
 
-* 📦 **Berkas APK**: [`release/KlimoApp-release.apk`](release/KlimoApp-release.apk)
+* 🤖 **Android APK (Siap Pasang)**: [`release/KlimoApp-release.apk`](release/KlimoApp-release.apk) (~60.7 MB, Universal APK, Android 6.0+)
+* 🍏 **iOS Build (CI/CD GitHub Actions)**: Pipeline otomatis di [`.github/workflows/build-ios.yml`](.github/workflows/build-ios.yml) (menghasilkan `KlimoApp-ios-release.ipa` menggunakan runner macOS M1).
 * 📖 **Panduan Pasang**: [Baca Panduan Instalasi di release/README.md](release/README.md)
-* ⚡ **Ukuran**: ~60.7 MB (Universal APK, Android 6.0+)
 
 ---
 

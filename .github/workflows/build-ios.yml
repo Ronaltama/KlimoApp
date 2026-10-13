@@ -1,0 +1,78 @@
+name: Build iOS Release (CI/CD)
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_to_repo:
+        description: 'Commit file IPA hasil build ke folder release/ di repo?'
+        required: true
+        type: boolean
+        default: true
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-ios:
+    name: Build & Package iOS Release
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🛠️ Setup Flutter Environment
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+          cache-key: "flutter-:os-:-:channel-:-:version-:-:arch-:-:hash-"
+
+      - name: 📦 Install Flutter Dependencies
+        run: |
+          cd FlutterApps
+          flutter pub get
+
+      - name: 🍏 Build iOS Application (Release Mode)
+        run: |
+          cd FlutterApps
+          flutter build ios --release --no-codesign
+
+      - name: 📦 Package into Unsigned IPA
+        run: |
+          cd FlutterApps/build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -qr KlimoApp-ios-release.ipa Payload
+          ls -lh KlimoApp-ios-release.ipa
+
+      - name: 📤 Upload iOS Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KlimoApp-iOS-Release
+          path: FlutterApps/build/ios/iphoneos/KlimoApp-ios-release.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 💾 Copy to release/ & Commit to Repository
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.commit_to_repo || startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          mkdir -p release
+          cp FlutterApps/build/ios/iphoneos/KlimoApp-ios-release.ipa release/KlimoApp-ios-release.ipa
+          
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add release/KlimoApp-ios-release.ipa
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "build(ios): update KlimoApp-ios-release.ipa via CI/CD [skip ci]"
+            git push origin main
+          fi
