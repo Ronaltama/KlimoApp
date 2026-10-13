@@ -5,104 +5,234 @@ import '../theme/app_theme.dart';
 class UVDetailScreen extends StatelessWidget {
   const UVDetailScreen({super.key});
 
+  // Ukuran huruf. Sama dengan layar Beranda dan Profil.
+  static const _fsCaption = 11.0;
+  static const _fsSmall = 12.0;
+  static const _fsBody = 13.0;
+  static const _fsTitle = 15.0;
+  static const _fsBig = 28.0;
+  static const _fsHeader = 17.0;
+
+  // Data contoh. Ganti dengan data dari ApiService saat sudah tersedia.
+  static const _uv = 8;
+  static const _uvMax = 11;
+  static const _sensorName = 'Sensor UV';          
+  static const _lightLabel = 'Panas terik';        
+  static const _skinType = 'kulitmu';              
+  static const _spf = '30+';
+  static const _uvStatus = 'Sangat tinggi';
+  static const _exposurePercent = 68;
+  static const _lastOles = '10:15';
+  static const _hourlyUv = [0.12, 0.22, 0.50, 0.72, 0.88, 1.00, 1.00, 0.82, 0.58, 0.38];
+  static const _hourLabels = ['07', '08', '09', '10', '11', '12', '13', '14', '15', '16'];
+  static const _labelShown = {'07', '10', '12', '14', '16'};
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = AppPalette.of(context);
 
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
+      backgroundColor: p.bg,
+      appBar: AppBar(
+        backgroundColor: p.bg,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              decoration: BoxDecoration(
+                color: p.card,
+                shape: BoxShape.circle,
+                border: Border.all(color: p.cardBorder),
+              ),
+              child: Icon(Icons.chevron_left, size: 22, color: p.textPrimary),
+            ),
+          ),
+        ),
+        leadingWidth: 56,
+        title: Text(
+          'UV & Sunscreen',
+          style: TextStyle(
+            color: p.textPrimary,
+            fontSize: _fsHeader,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: GestureDetector(
+                onTap: () => _notify(context, 'Menampilkan data hari ini.'),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: p.card,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: p.cardBorder),
+                  ),
+                  child: Text(
+                    'Hari ini',
+                    style: TextStyle(color: p.textSecondary, fontSize: _fsSmall),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
-        child: Column(
-          children: [
-            // Top App Bar
-            _buildAppBar(context, isDark),
-
-            // Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Lebar konten dibatasi agar rapi di tablet dan layar lebar
+            final maxW = constraints.maxWidth > 480 ? 480.0 : constraints.maxWidth;
+            return Center(
+              child: SizedBox(
+                width: maxW,
+                child: ListView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                   children: [
-                    _buildCurrentUVCard(isDark),
-                    const SizedBox(height: 16),
-                    _buildHourlyUVCard(isDark),
-                    const SizedBox(height: 16),
-                    _buildAccumulationCard(isDark),
-                    const SizedBox(height: 16),
-                    _buildMetricRow(isDark),
-                    const SizedBox(height: 20),
+                    _uvCard(context, p),
+                    const SizedBox(height: 14),
+                    _hourlyCard(context, p),
+                    const SizedBox(height: 14),
+                    _exposureCard(context, p),
+                    const SizedBox(height: 14),
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _spfCard(p)),
+                          const SizedBox(width: 14),
+                          Expanded(child: _lastOlesCard(p)),
+                        ],
+                      ),
+                    ),
                   ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _notify(BuildContext context, String message) {
+    final p = AppPalette.of(context);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: p.primary,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+  }
+
+  // ---------- Kartu UV utama ----------
+
+  Widget _uvCard(BuildContext context, AppPalette p) {
+    return GestureDetector(
+      onTap: () => _notify(context, 'UV $_uv dari $_uvMax. Tingkat $_uvStatus.'),
+      child: AppCard(
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _sensorName,
+                    style: TextStyle(
+                      color: p.primary,
+                      fontSize: _fsSmall,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'UV $_uv · $_uvStatus',
+                      style: TextStyle(
+                        color: p.textPrimary,
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _chip(p),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 76,
+              height: 76,
+              child: CustomPaint(
+                painter: _UVGaugePainter(
+                  progress: _uv / _uvMax,
+                  strokeWidth: 8,
+                  trackColor: p.divider,
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$_uv',
+                        style: TextStyle(
+                          color: p.textPrimary,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          height: 1.0,
+                        ),
+                      ),
+                      Text(
+                        '/ $_uvMax',
+                        style: TextStyle(color: p.textMuted, fontSize: _fsCaption),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(context, isDark),
     );
   }
 
-  Widget _buildAppBar(BuildContext context, bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+  Widget _chip(AppPalette p) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: p.orange.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: p.orange.withValues(alpha: 0.35)),
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Back Button
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: isDark ? AppTheme.darkCard : Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(
-                Icons.arrow_back_ios_new,
-                size: 16,
-                color: isDark ? Colors.white : const Color(0xFF475569),
-              ),
-            ),
-          ),
-
-          // Title
-          Text(
-            'UV & Sunscreen',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white : const Color(0xFF1E293B),
-            ),
-          ),
-
-          // 'Hari ini' Pill Button
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: isDark ? AppTheme.darkCard : Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isDark ? AppTheme.darkCardBorder : const Color(0xFFE2E8F0),
-              ),
-            ),
+          Icon(Icons.wb_sunny_outlined, size: 14, color: p.orange),
+          const SizedBox(width: 6),
+          Flexible(
             child: Text(
-              'Hari ini',
+              _lightLabel,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                color: p.orange,
+                fontSize: _fsSmall,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -111,212 +241,79 @@ class UVDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCurrentUVCard(bool isDark) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFF1F5F9),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+  // ---------- Grafik per jam ----------
+
+  Widget _hourlyCard(BuildContext context, AppPalette p) {
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'VEML6075',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF10B981),
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'UV 8 · Sangat tinggi',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF132D27) : const Color(0xFFFEF3C7),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isDark ? const Color(0xFF1A453B) : const Color(0xFFFDE68A),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+          Text(
+            'Sinar UV tiap jam',
+            style: TextStyle(
+              color: p.textPrimary,
+              fontSize: _fsTitle,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            height: 150,
+            padding: const EdgeInsets.fromLTRB(8, 10, 8, 0),
+            decoration: BoxDecoration(
+              color: p.bg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List.generate(_hourLabels.length, (i) {
+                final label = _hourLabels[i];
+                final v = _hourlyUv[i];
+                return Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      Icon(
-                        Icons.wb_sunny_outlined,
-                        size: 16,
-                        color: isDark ? AppTheme.primary : const Color(0xFFF59E0B),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Terik (lux tinggi)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? AppTheme.primary : const Color(0xFFF59E0B),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: FractionallySizedBox(
+                            heightFactor: v,
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 3),
+                              decoration: const BoxDecoration(
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(6),
+                                ),
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [Color(0xFFEA580C), Color(0xFFFBBF24)],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 14,
+                        child: _labelShown.contains(label)
+                            ? FittedBox(
+                                child: Text(
+                                  label,
+                                  style: TextStyle(
+                                    color: p.textMuted,
+                                    fontSize: _fsCaption,
+                                  ),
+                                ),
+                              )
+                            : const SizedBox.shrink(),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Circular Gauge Widget
-          _buildGauge(current: 8, max: 11, isDark: isDark),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGauge({required int current, required int max, required bool isDark}) {
-    return SizedBox(
-      width: 82,
-      height: 82,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CustomPaint(
-            size: const Size(82, 82),
-            painter: _UVGaugePainter(
-              progress: current / max,
-              strokeWidth: 9.0,
-              trackColor: isDark ? const Color(0xFF223049) : const Color(0xFFE2E8F0),
-            ),
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '$current',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : const Color(0xFF1E293B),
-                  height: 1.0,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '/ $max',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF94A3B8),
-                  height: 1.0,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHourlyUVCard(bool isDark) {
-    final barData = [
-      {'val': 0.12}, // 07
-      {'val': 0.22}, // 08
-      {'val': 0.50}, // 09
-      {'val': 0.72}, // 10
-      {'val': 0.88}, // 11
-      {'val': 1.00}, // 12
-      {'val': 1.00}, // 13
-      {'val': 0.82}, // 14
-      {'val': 0.58}, // 15
-      {'val': 0.38}, // 16
-    ];
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFF1F5F9),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'UV per jam',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : const Color(0xFF1E293B),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            height: 140,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isDark ? Colors.transparent : const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: barData.map((data) {
-                final heightFactor = data['val'] as double;
-                return Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      height: 140 * heightFactor * 0.95,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(6),
-                        gradient: const LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Color(0xFFFBBF24), // Golden yellow
-                            Color(0xFFEA580C), // Orange
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
                 );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: const [
-                Text('07', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500)),
-                Text('10', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500)),
-                Text('12', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500)),
-                Text('14', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500)),
-                Text('16', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500)),
-              ],
+              }),
             ),
           ),
         ],
@@ -324,64 +321,69 @@ class UVDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildAccumulationCard(bool isDark) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isDark ? AppTheme.darkCardBorder : const Color(0xFFF1F5F9),
+  // ---------- Akumulasi paparan ----------
+
+  Widget _exposureCard(BuildContext context, AppPalette p) {
+    return GestureDetector(
+      onTap: () => _notify(
+        context,
+        'Kamu sudah memakai $_exposurePercent% dari batas aman $_skinType hari ini.',
+      ),
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Akumulasi paparan (perkiraan)',
+              style: TextStyle(
+                color: p.textPrimary,
+                fontSize: _fsTitle,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: _exposurePercent / 100,
+                minHeight: 8,
+                backgroundColor: p.divider,
+                valueColor: AlwaysStoppedAnimation<Color>(p.orange),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '$_exposurePercent% dari batas aman kulit $_skinType',
+              style: TextStyle(color: p.textSecondary, fontSize: _fsBody),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  // ---------- Kartu bawah ----------
+
+  Widget _spfCard(AppPalette p) {
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Akumulasi paparan (perkiraan)',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : const Color(0xFF1E293B),
-            ),
+            'SPF disarankan',
+            style: TextStyle(color: p.textMuted, fontSize: _fsSmall),
           ),
-          const SizedBox(height: 16),
-          Container(
-            height: 14,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF101B2B) : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: 0.68,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  color: const Color(0xFFF59E0B),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          RichText(
-            text: TextSpan(
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _spf,
               style: TextStyle(
-                fontSize: 13,
-                color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                color: p.primary,
+                fontSize: _fsBig,
+                fontWeight: FontWeight.bold,
               ),
-              children: [
-                TextSpan(
-                  text: '68% ',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : const Color(0xFF1E293B),
-                  ),
-                ),
-                const TextSpan(text: 'batas harian kulit tipe IV'),
-              ],
             ),
           ),
         ],
@@ -389,134 +391,34 @@ class UVDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMetricRow(bool isDark) {
-    return Row(
-      children: [
-        // Card 1: SPF disarankan
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-            decoration: BoxDecoration(
-              color: isDark ? AppTheme.darkCard : Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: isDark ? AppTheme.darkCardBorder : const Color(0xFFF1F5F9),
+  Widget _lastOlesCard(AppPalette p) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Terakhir dioles',
+            style: TextStyle(color: p.textMuted, fontSize: _fsSmall),
+          ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _lastOles,
+              style: TextStyle(
+                color: p.textPrimary,
+                fontSize: _fsBig,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'SPF disarankan',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  '30+',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF00B074),
-                    height: 1.0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        // Card 2: Oles terakhir
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-            decoration: BoxDecoration(
-              color: isDark ? AppTheme.darkCard : Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: isDark ? AppTheme.darkCardBorder : const Color(0xFFF1F5F9),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Oles terakhir',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '10:15',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                    height: 1.0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBottomNav(BuildContext context, bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkBackground : Colors.white,
-        border: Border(
-          top: BorderSide(
-            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-            width: 1,
-          ),
-        ),
-      ),
-      child: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: 0,
-        backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
-        elevation: 0,
-        onTap: (index) {
-          Navigator.pop(context);
-        },
-        selectedItemColor: AppTheme.primary,
-        unselectedItemColor: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8),
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 11),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Beranda',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map_outlined),
-            label: 'Peta',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_outlined),
-            label: 'Riwayat',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.smartphone_outlined),
-            label: 'Alat',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            label: 'Profil',
           ),
         ],
       ),
     );
   }
+
+  // ---------- Painter ----------
 }
 
 class _UVGaugePainter extends CustomPainter {
@@ -534,46 +436,37 @@ class _UVGaugePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - strokeWidth) / 2;
-
-    // Background track circle
-    final trackPaint = Paint()
-      ..color = trackColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-
-    canvas.drawCircle(center, radius, trackPaint);
-
-    // Progress Arc with smooth gradient
-    final startAngle = -math.pi / 2;
-    final sweepAngle = 2 * math.pi * progress;
-
     final rect = Rect.fromCircle(center: center, radius: radius);
-    final gradient = const SweepGradient(
-      startAngle: 0.0,
-      endAngle: 2 * math.pi,
-      colors: [
-        Color(0xFFE11D48), // Red
-        Color(0xFFF59E0B), // Amber
-        Color(0xFFEA580C), // Orange
-        Color(0xFFE11D48), // Red
-      ],
-      stops: [0.0, 0.4, 0.8, 1.0],
-      transform: GradientRotation(-math.pi / 2),
+
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = trackColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth,
     );
 
-    final progressPaint = Paint()
-      ..shader = gradient.createShader(rect)
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = strokeWidth;
-
-    canvas.drawArc(rect, startAngle, sweepAngle, false, progressPaint);
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      2 * math.pi * progress,
+      false,
+      Paint()
+        ..shader = const SweepGradient(
+          colors: [Color(0xFFE11D48), Color(0xFFF59E0B), Color(0xFFEA580C), Color(0xFFE11D48)],
+          stops: [0.0, 0.4, 0.8, 1.0],
+          transform: GradientRotation(-math.pi / 2),
+        ).createShader(rect)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = strokeWidth,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _UVGaugePainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.strokeWidth != strokeWidth ||
-        oldDelegate.trackColor != trackColor;
-  }
+  bool shouldRepaint(covariant _UVGaugePainter old) =>
+      old.progress != progress ||
+      old.strokeWidth != strokeWidth ||
+      old.trackColor != trackColor;
 }

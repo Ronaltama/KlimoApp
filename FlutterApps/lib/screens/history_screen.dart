@@ -134,9 +134,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                 ),
                 Text(
-                  'Analitik paparan mikroiklim',
+                  'Rekaman cuaca & paparan kamu',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
                   ),
                 ),
@@ -168,7 +168,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     : const Icon(Icons.refresh, size: 16, color: AppTheme.primary),
                 const SizedBox(width: 6),
                 Text(
-                  'Sinkron',
+                  'Perbarui',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -242,8 +242,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildChartCard(bool isDark) {
-    String chartTitle = _isWeekly ? 'Paparan UV Mingguan (Maksimum per Hari)' : 'Paparan UV Harian (Kurva Jam)';
-    String subtitle = _isWeekly ? 'Data paparan 7 hari terakhir' : 'Fluktuasi intensitas UV sepanjang hari';
+    final String chartTitle = _isWeekly ? 'Sinar UV Minggu Ini' : 'Sinar UV Hari Ini';
+    final String subtitle = _isWeekly ? 'Nilai tertinggi tiap hari (7 hari terakhir)' : 'Seberapa kuat matahari tiap jam';
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -288,7 +288,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'Puncak: ${_peakUv.toStringAsFixed(1)}',
+                  'Tertinggi: ${_peakUv.toStringAsFixed(1)}',
                   style: const TextStyle(
                     color: Color(0xFFF59E0B),
                     fontSize: 11,
@@ -298,85 +298,98 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 28),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: _isWeekly
-                ? Row(
-                    key: const ValueKey('weekly_chart'),
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _buildBar('Sen', 0.40, false, isDark, '4.2'),
-                      _buildBar('Sel', 0.55, false, isDark, '5.8'),
-                      _buildBar('Rab', 0.70, false, isDark, '7.2'),
-                      _buildBar('Kam', (_peakUv / 11.0).clamp(0.2, 0.98), true, isDark, _peakUv.toStringAsFixed(1)),
-                      _buildBar('Jum', 0.60, false, isDark, '6.1'),
-                      _buildBar('Sab', 0.35, false, isDark, '3.8'),
-                      _buildBar('Min', 0.50, false, isDark, '5.0'),
-                    ],
-                  )
-                : Row(
-                    key: const ValueKey('daily_chart'),
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _buildBar('08:00', 0.20, false, isDark, '2.1'),
-                      _buildBar('10:00', 0.55, false, isDark, '5.5'),
-                      _buildBar('12:00', (_peakUv / 11.0).clamp(0.2, 0.98), true, isDark, _peakUv.toStringAsFixed(1)),
-                      _buildBar('14:00', 0.75, false, isDark, '7.8'),
-                      _buildBar('16:00', 0.40, false, isDark, '4.0'),
-                      _buildBar('18:00', 0.10, false, isDark, '0.5'),
-                    ],
-                  ),
+          const SizedBox(height: 24),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final chartWidth = constraints.maxWidth;
+              final barMaxHeight = chartWidth * 0.42; // proporsional dengan lebar kartu
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: _isWeekly
+                    ? Row(
+                        key: const ValueKey('weekly_chart'),
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          _buildBar('Sen', 0.40, false, isDark, '4.2', barMaxHeight),
+                          _buildBar('Sel', 0.55, false, isDark, '5.8', barMaxHeight),
+                          _buildBar('Rab', 0.70, false, isDark, '7.2', barMaxHeight),
+                          _buildBar('Kam', (_peakUv / 11.0).clamp(0.2, 0.98), true, isDark, _peakUv.toStringAsFixed(1), barMaxHeight),
+                          _buildBar('Jum', 0.60, false, isDark, '6.1', barMaxHeight),
+                          _buildBar('Sab', 0.35, false, isDark, '3.8', barMaxHeight),
+                          _buildBar('Min', 0.50, false, isDark, '5.0', barMaxHeight),
+                        ],
+                      )
+                    : Row(
+                        key: const ValueKey('daily_chart'),
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          _buildBar('08.00', 0.20, false, isDark, '2.1', barMaxHeight),
+                          _buildBar('10.00', 0.55, false, isDark, '5.5', barMaxHeight),
+                          _buildBar('12.00', (_peakUv / 11.0).clamp(0.2, 0.98), true, isDark, _peakUv.toStringAsFixed(1), barMaxHeight),
+                          _buildBar('14.00', 0.75, false, isDark, '7.8', barMaxHeight),
+                          _buildBar('16.00', 0.40, false, isDark, '4.0', barMaxHeight),
+                          _buildBar('18.00', 0.10, false, isDark, '0.5', barMaxHeight),
+                        ],
+                      ),
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBar(String label, double heightFactor, bool isActive, bool isDark, String valueLabel) {
+  Widget _buildBar(
+    String label,
+    double heightFactor,
+    bool isActive,
+    bool isDark,
+    String valueLabel,
+    double maxHeight,
+  ) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           valueLabel,
           style: TextStyle(
             fontSize: 10,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-            color: isActive ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+            fontWeight: isActive ? FontWeight.bold : FontWeight.w400,
+            color: isActive
+                ? AppTheme.primary
+                : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 5),
         Container(
-          width: 24,
-          height: 120 * heightFactor,
+          width: 22,
+          height: (maxHeight * heightFactor).clamp(8.0, maxHeight),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: isActive
-                  ? [
-                      const Color(0xFF34D399),
-                      const Color(0xFF00B074),
-                    ]
+                  ? [const Color(0xFF34D399), const Color(0xFF00B074)]
                   : [
                       isDark ? const Color(0xFF264C46) : const Color(0xFFA7F3D0),
                       isDark ? const Color(0xFF13755C) : const Color(0xFF059669),
                     ],
             ),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             boxShadow: isActive
                 ? [
                     BoxShadow(
                       color: AppTheme.primary.withValues(alpha: 0.3),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
-                    )
+                    ),
                   ]
                 : null,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Text(
           label,
           style: TextStyle(
@@ -384,7 +397,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ? AppTheme.primary
                 : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
             fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-            fontSize: 11,
+            fontSize: 10,
           ),
         ),
       ],
@@ -396,31 +409,31 @@ class _HistoryScreenState extends State<HistoryScreen> {
       children: [
         Expanded(
           child: _buildSmallCard(
-            'Puncak UV',
+            'UV Tertinggi',
             _peakUv.toStringAsFixed(1),
             _peakUv >= 8 ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
             isDark,
-            subtitle: _peakUv >= 8 ? 'Ekstrem' : 'Sedang',
+            subtitle: _peakUv >= 8 ? '⚠ Tinggi' : 'Sedang',
           ),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 12),
         Expanded(
           child: _buildSmallCard(
-            'Rata-rata Suhu',
+            'Suhu Rata-rata',
             '${_avgTemp.toStringAsFixed(1)}°C',
             AppTheme.primary,
             isDark,
-            subtitle: 'RH ~62%',
+            subtitle: 'Lembap 62%',
           ),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 12),
         Expanded(
           child: _buildSmallCard(
-            'Rata Gas VOC',
-            '$_avgVoc',
+            'Kualitas Udara',
+            _avgVoc >= 200 ? 'Buruk' : 'Baik',
             _avgVoc >= 200 ? const Color(0xFFEF4444) : AppTheme.primary,
             isDark,
-            subtitle: _avgVoc >= 200 ? 'Waspada' : 'Baik',
+            subtitle: 'VOC $_avgVoc',
           ),
         ),
       ],
@@ -429,13 +442,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildSmallCard(String title, String value, Color valueColor, bool isDark, {String? subtitle}) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : AppTheme.card,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isDark ? AppTheme.darkCardBorder : Colors.transparent,
         ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -446,25 +468,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
               color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
               fontSize: 11,
               fontWeight: FontWeight.w500,
+              height: 1.2,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             value,
             style: TextStyle(
               color: valueColor,
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
-              height: 1.0,
+              height: 1.1,
             ),
           ),
           if (subtitle != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               subtitle,
               style: TextStyle(
                 color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
-                fontSize: 11,
+                fontSize: 10,
               ),
             ),
           ],
@@ -492,7 +517,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Log Rekaman Terbaru',
+                'Rekaman Terbaru',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
@@ -500,8 +525,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
               ),
               Text(
-                'Total: ${_historyData.length} data',
-                style: TextStyle(
+                '${_historyData.length} catatan',
+                style: const TextStyle(
                   fontSize: 12,
                   color: AppTheme.primary,
                   fontWeight: FontWeight.w600,
@@ -583,11 +608,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
           Row(
             children: [
-              _buildBadge('UV ${uv.toStringAsFixed(1)}', uv >= 8 ? const Color(0xFFEF4444) : AppTheme.primary, isDark),
+              _buildBadge(
+                'UV ${uv.toStringAsFixed(1)}',
+                uv >= 8 ? const Color(0xFFEF4444) : AppTheme.primary,
+                isDark,
+                tooltip: uv >= 8 ? 'Tinggi' : 'Aman',
+              ),
               const SizedBox(width: 6),
               _buildBadge('${temp.toStringAsFixed(1)}°C', const Color(0xFFF59E0B), isDark),
               const SizedBox(width: 6),
-              _buildBadge('VOC $voc', voc >= 250 ? const Color(0xFFEF4444) : const Color(0xFF3B82F6), isDark),
+              _buildBadge(
+                voc >= 250 ? 'Udara Buruk' : 'Udara OK',
+                voc >= 250 ? const Color(0xFFEF4444) : const Color(0xFF3B82F6),
+                isDark,
+              ),
             ],
           ),
         ],
@@ -595,8 +629,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildBadge(String text, Color color, bool isDark) {
-    return Container(
+  Widget _buildBadge(String text, Color color, bool isDark, {String? tooltip}) {
+    final widget = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: isDark ? 0.2 : 0.12),
@@ -611,6 +645,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
       ),
     );
+    if (tooltip != null) return Tooltip(message: tooltip, child: widget);
+    return widget;
   }
 
   Widget _buildComplianceCard(bool isDark) {
@@ -635,15 +671,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: isDark ? Colors.white : AppTheme.textDark,
-                  fontSize: 16,
+                  fontSize: 15,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          _buildProgressRow('Oles ulang tepat waktu', '85%', 0.85, isDark),
           const SizedBox(height: 18),
-          _buildProgressRow('Target minum tercapai', '70%', 0.70, isDark),
+          _buildProgressRow('Sunscreen dioles ulang tepat waktu', '85%', 0.85, isDark),
+          const SizedBox(height: 16),
+          _buildProgressRow('Target minum air harian tercapai', '70%', 0.70, isDark),
         ],
       ),
     );
@@ -706,11 +742,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
               const Icon(Icons.lightbulb_outline, color: AppTheme.primary, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Evaluasi & Saran',
+                'Saran untuk kamu',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: isDark ? Colors.white : AppTheme.primary,
-                  fontSize: 16,
+                  fontSize: 15,
                 ),
               ),
             ],
@@ -718,12 +754,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
           const SizedBox(height: 12),
           Text(
             _peakUv >= 8
-                ? 'Terdeteksi paparan UV puncak ${_peakUv.toStringAsFixed(1)} (Ekstrem). Selalu gunakan sunscreen SPF 50+ dan hindari matahari langsung jam 11:00 - 14:00.'
-                : 'Paparan lingkungan dalam batas aman terkendali. Lanjutkan kebiasaan baik menggunakan perlindungan ringan saat di luar ruangan.',
+                ? 'Sinar UV hari ini sangat kuat (${_peakUv.toStringAsFixed(1)}). Pakai sunscreen SPF 50+ dan hindari keluar antara pukul 11.00–14.00.'
+                : 'Paparan sinar UV masih dalam batas aman. Teruslah pakai perlindungan ringan saat beraktivitas di luar.',
             style: TextStyle(
               color: isDark ? AppTheme.darkTextSecondary : AppTheme.primary,
-              fontSize: 14,
-              height: 1.4,
+              fontSize: 13,
+              height: 1.5,
             ),
           ),
         ],

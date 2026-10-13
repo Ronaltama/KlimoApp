@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Theme state notifier
-  static final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.dark);
+  // Default: light
+  static final ValueNotifier<ThemeMode> themeModeNotifier =
+      ValueNotifier(ThemeMode.light);
 
   static bool get isDark => themeModeNotifier.value == ThemeMode.dark;
 
@@ -11,21 +12,21 @@ class AppTheme {
         themeModeNotifier.value == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
   }
 
-  // Brand & Accent Colors
+  // Brand & accent
   static const Color primary = Color(0xFF00B074);
   static const Color primaryLight = Color(0xFF009B65);
   static const Color warning = Color(0xFFB45309);
   static const Color warningBg = Color(0xFFFEF3C7);
   static const Color error = Color(0xFFEF4444);
 
-  // Light Mode Colors
+  // Light
   static const Color background = Color(0xFFF7F9FA);
   static const Color card = Colors.white;
   static const Color textDark = Color(0xFF1F2937);
   static const Color textLight = Color(0xFF6B7280);
   static const Color greyLight = Color(0xFFE5E7EB);
 
-  // Dark Mode Colors (from screenshots)
+  // Dark
   static const Color darkBackground = Color(0xFF0F172A);
   static const Color darkCard = Color(0xFF182234);
   static const Color darkCardBorder = Color(0xFF223049);
@@ -34,7 +35,6 @@ class AppTheme {
   static const Color darkTrack = Color(0xFF101B2B);
   static const Color darkPill = Color(0xFF111C2B);
 
-  // Dynamic getters based on current theme
   static Color get currentBackground => isDark ? darkBackground : background;
   static Color get currentCard => isDark ? darkCard : card;
   static Color get currentCardBorder => isDark ? darkCardBorder : const Color(0xFFF1F5F9);
@@ -66,14 +66,9 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryLight,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           padding: const EdgeInsets.symmetric(vertical: 16),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           elevation: 0,
         ),
       ),
@@ -124,14 +119,9 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
           foregroundColor: darkBackground,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           padding: const EdgeInsets.symmetric(vertical: 16),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           elevation: 0,
         ),
       ),
@@ -140,6 +130,101 @@ class AppTheme {
         selectedItemColor: primary,
         unselectedItemColor: darkTextSecondary,
       ),
+    );
+  }
+}
+
+/// Warna yang otomatis mengikuti brightness tema.
+class AppPalette {
+  final Color bg;
+  final Color card;
+  final Color cardBorder;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textMuted;
+  final Color divider;
+  final Color primary;
+  final Color danger;
+  final Color orange;
+
+  const AppPalette({
+    required this.bg,
+    required this.card,
+    required this.cardBorder,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textMuted,
+    required this.divider,
+    required this.primary,
+    required this.danger,
+    required this.orange,
+  });
+
+  static const dark = AppPalette(
+    bg: AppTheme.darkBackground,
+    card: AppTheme.darkCard,
+    cardBorder: AppTheme.darkCardBorder,
+    textPrimary: Colors.white,
+    textSecondary: AppTheme.darkTextSecondary,
+    textMuted: Color(0xFF64748B),
+    divider: AppTheme.darkCardBorder,
+    primary: AppTheme.primary,
+    danger: AppTheme.error,
+    orange: Color(0xFFF59E0B),
+  );
+
+  static const light = AppPalette(
+    bg: AppTheme.background,
+    card: Colors.white,
+    cardBorder: AppTheme.greyLight,
+    textPrimary: AppTheme.textDark,
+    textSecondary: AppTheme.textLight,
+    textMuted: Color(0xFF9CA3AF),
+    divider: AppTheme.greyLight,
+    primary: AppTheme.primary,
+    danger: AppTheme.error,
+    orange: Color(0xFFEA580C),
+  );
+
+  static AppPalette of(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark ? dark : light;
+  }
+}
+
+/// Kartu dasar: putih + bayangan lembut di light, border tipis di dark.
+class AppCard extends StatelessWidget {
+  const AppCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+  });
+
+  final Widget child;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: p.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: isDark ? p.cardBorder : Colors.transparent),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+      ),
+      child: child,
     );
   }
 }

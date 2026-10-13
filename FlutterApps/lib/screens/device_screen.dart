@@ -159,9 +159,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   ),
                 ),
                 Text(
-                  'Manajemen perangkat wearable',
+                  'Kelola alat Klimo kamu',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
                   ),
                 ),
@@ -193,7 +193,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     : const Icon(Icons.refresh, size: 16, color: AppTheme.primary),
                 const SizedBox(width: 6),
                 Text(
-                  'Sinkron',
+                  'Perbarui',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -257,7 +257,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      'ESP32-C3 RISC-V Wearable',
+                      'Klimo Wearth Gen 1',
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
@@ -388,7 +388,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
               const Icon(Icons.memory, color: AppTheme.primary, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Spesifikasi Hardware',
+                'Info Perangkat',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 15,
@@ -398,10 +398,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          _buildSpecRow('MAC Address', macAddress, isDark),
-          _buildSpecRow('Versi Firmware', 'v1.2.0 (PlatformIO / Arduino)', isDark),
-          _buildSpecRow('Konektivitas', 'BLE 5.0 & WiFi 2.4GHz', isDark),
-          _buildSpecRow('Prosesor', 'Espressif ESP32-C3 RISC-V 160MHz', isDark),
+          _buildSpecRow('ID Perangkat', macAddress, isDark),
+          _buildSpecRow('Versi Firmware', 'v1.2.0', isDark),
+          _buildSpecRow('Koneksi', 'Bluetooth & WiFi', isDark),
+          _buildSpecRow('Chip', 'ESP32-C3 RISC-V', isDark),
         ],
       ),
     );
@@ -409,23 +409,29 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   Widget _buildSpecRow(String label, String value, bool isDark) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+              ),
             ),
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white : AppTheme.textDark,
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : AppTheme.textDark,
+              ),
             ),
           ),
         ],
@@ -447,19 +453,19 @@ class _DeviceScreenState extends State<DeviceScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Status Sensor Fisik',
+            'Status Sensor',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: 16,
+              fontSize: 15,
               color: isDark ? Colors.white : AppTheme.textDark,
             ),
           ),
-          const SizedBox(height: 16),
-          _buildSensorRow(Icons.wb_sunny_outlined, 'Sensor UV (LTR-390 / Analog)', isDark),
-          _buildSensorRow(Icons.lightbulb_outline, 'Sensor Cahaya (Ambient Lux)', isDark),
-          _buildSensorRow(Icons.thermostat_outlined, 'Suhu & Kelembapan (SHT40 I2C)', isDark),
-          _buildSensorRow(Icons.air, 'Gas VOC & Udara (SGP41)', isDark),
-          _buildSensorRow(Icons.timeline, 'Accelerometer (Gerak Pengguna)', isDark),
+          const SizedBox(height: 14),
+          _buildSensorRow(Icons.wb_sunny_outlined, 'Sinar UV', isDark),
+          _buildSensorRow(Icons.lightbulb_outline, 'Cahaya', isDark),
+          _buildSensorRow(Icons.thermostat_outlined, 'Suhu & Kelembapan', isDark),
+          _buildSensorRow(Icons.air, 'Kualitas Udara', isDark),
+          _buildSensorRow(Icons.timeline, 'Gerakan', isDark),
         ],
       ),
     );
@@ -483,7 +489,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 name,
                 style: TextStyle(
                   color: isDark ? Colors.white : AppTheme.textDark,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -494,7 +500,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
               Icon(Icons.circle, color: AppTheme.primary, size: 7),
               SizedBox(width: 6),
               Text(
-                'Normal',
+                'Aktif',
                 style: TextStyle(
                   color: AppTheme.primary,
                   fontWeight: FontWeight.bold,
@@ -528,13 +534,13 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 'Mode hemat daya',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: 15,
+                  fontSize: 14,
                   color: isDark ? Colors.white : AppTheme.textDark,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               Text(
-                'Interval pengiriman: 10 detik',
+                _powerSaving ? 'Baterai lebih awet, data tiap 10 detik' : 'Performa penuh, data tiap 2 detik',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
@@ -601,27 +607,35 @@ class _DeviceScreenState extends State<DeviceScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Pola Peringatan Getar (Haptic)',
+            'Arti pola getar',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: 16,
+              fontSize: 15,
               color: isDark ? Colors.white : AppTheme.textDark,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
+          Text(
+            'Alat akan bergetar sesuai jenis peringatan',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+            ),
+          ),
+          const SizedBox(height: 14),
           Wrap(
             spacing: 14,
             runSpacing: 10,
             children: [
-              _buildPatternLegend(AppTheme.primary, 'UV: 2 getar pendek', isDark),
+              _buildPatternLegend(AppTheme.primary, 'UV tinggi → 2× getar pendek', isDark),
               _buildPatternLegend(
                 isDark ? AppTheme.darkTextSecondary : const Color(0xFFF59E0B),
-                'Panas: 1 getar panjang',
+                'Terlalu panas → 1× getar panjang',
                 isDark,
               ),
               _buildPatternLegend(
                 isDark ? AppTheme.darkTextSecondary : const Color(0xFFEF4444),
-                'Udara: 3 getar pendek',
+                'Udara buruk → 3× getar pendek',
                 isDark,
               ),
             ],

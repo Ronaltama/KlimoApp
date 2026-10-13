@@ -1,5 +1,7 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -9,15 +11,15 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
-    // Default placeholder agar user bisa langsung tes atau ketik sendiri
+    // TODO: hapus sebelum rilis
     _emailController.text = 'test@example.com';
     _passwordController.text = 'password';
   }
@@ -30,219 +32,142 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
+    final p = AppPalette.of(context);
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Email dan kata sandi wajib diisi.'),
-          backgroundColor: Color(0xFFEF4444),
+        SnackBar(
+          content: const Text('Email dan kata sandi wajib diisi.'),
+          backgroundColor: p.danger,
         ),
       );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
-
+    setState(() => _isLoading = true);
     final result = await ApiService.login(email, password);
-
     if (!mounted) return;
-
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() => _isLoading = false);
 
     if (result['success']) {
-      final isSetupDone = await ApiService.isOnboardingCompleted();
-      if (!mounted) return;
-      if (isSetupDone) {
-        Navigator.pushReplacementNamed(context, '/main');
-      } else {
-        Navigator.pushReplacementNamed(context, '/pairing');
-      }
+      await _goNext();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result['message'] ?? 'Login gagal. Periksa kembali akun atau backend.'),
-          backgroundColor: const Color(0xFFEF4444),
+          content: Text(
+            result['message'] ?? 'Login gagal. Periksa kembali akun atau backend.',
+          ),
+          backgroundColor: p.danger,
           action: SnackBarAction(
             label: 'Lewati',
             textColor: Colors.white,
-            onPressed: () async {
-              final isSetupDone = await ApiService.isOnboardingCompleted();
-              if (!mounted) return;
-              if (isSetupDone) {
-                Navigator.pushReplacementNamed(context, '/main');
-              } else {
-                Navigator.pushReplacementNamed(context, '/pairing');
-              }
-            },
+            onPressed: _goNext,
           ),
         ),
       );
     }
   }
 
+  /// Ke main jika setup sudah selesai, selain itu ke pairing.
+  Future<void> _goNext() async {
+    final isSetupDone = await ApiService.isOnboardingCompleted();
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, isSetupDone ? '/main' : '/pairing');
+  }
+
   @override
   Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // Soft light background persis mockup
+      backgroundColor: p.bg,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 390),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // 1. Icon Logo 'K' Hijau
+                  // Logo
                   Container(
                     width: 68,
                     height: 68,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF00A86B), // Hijau emerald persis mockup
+                      color: p.primary,
                       borderRadius: BorderRadius.circular(18),
                     ),
-                    child: const Center(
-                      child: Text(
-                        'K',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          height: 1.0,
-                        ),
+                    child: const Text(
+                      'K',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // 2. Judul Aplikasi
-                  const Text(
+                  Text(
                     'Klimo Wearth',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
-                      letterSpacing: -0.3,
+                      color: p.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 8),
-
-                  // 3. Subjudul
-                  const Text(
+                  Text(
                     'Pantau UV, panas, dan udara dari alat\ndi bajumu.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
-                      color: Color(0xFF64748B),
+                      color: p.textSecondary,
                       height: 1.4,
                     ),
                   ),
                   const SizedBox(height: 28),
 
-                  // 4. White Card Form Input
-                  Container(
+                  // Form
+                  AppCard(
                     padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 26),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
-                          blurRadius: 24,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Input Field Email
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
-                          ),
-                          child: TextField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            style: const TextStyle(
-                              color: Color(0xFF0F172A),
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            cursorColor: const Color(0xFF00A86B),
-                            decoration: const InputDecoration(
-                              hintText: 'Email',
-                              hintStyle: TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 15,
-                                fontWeight: FontWeight.normal,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                            ),
-                          ),
+                        _field(
+                          p,
+                          controller: _emailController,
+                          hint: 'Email',
+                          keyboardType: TextInputType.emailAddress,
                         ),
                         const SizedBox(height: 14),
-
-                        // Input Field Kata Sandi
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
-                          ),
-                          child: TextField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            style: const TextStyle(
-                              color: Color(0xFF0F172A),
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
+                        _field(
+                          p,
+                          controller: _passwordController,
+                          hint: 'Kata sandi',
+                          obscure: _obscurePassword,
+                          suffix: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: p.textMuted,
+                              size: 20,
                             ),
-                            cursorColor: const Color(0xFF00A86B),
-                            decoration: InputDecoration(
-                              hintText: 'Kata sandi',
-                              hintStyle: const TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 15,
-                                fontWeight: FontWeight.normal,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                  color: const Color(0xFF94A3B8),
-                                  size: 20,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                              ),
-                            ),
+                            onPressed: () =>
+                                setState(() => _obscurePassword = !_obscurePassword),
                           ),
                         ),
                         const SizedBox(height: 18),
 
-                        // Tombol Masuk Hijau
                         SizedBox(
                           height: 52,
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _handleLogin,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00A86B),
+                              backgroundColor: p.primary,
                               foregroundColor: Colors.white,
                               elevation: 0,
                               shape: RoundedRectangleBorder(
@@ -255,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     width: 22,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2.2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      color: Colors.white,
                                     ),
                                   )
                                 : const Text(
@@ -263,38 +188,29 @@ class _LoginScreenState extends State<LoginScreen> {
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white,
                                     ),
                                   ),
                           ),
                         ),
                         const SizedBox(height: 22),
 
-                        // Divider 'atau'
                         Row(
                           children: [
-                            Expanded(child: Container(height: 1, color: const Color(0xFFE2E8F0))),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 14),
+                            Expanded(child: Divider(color: p.divider)),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
                               child: Text(
                                 'atau',
-                                style: TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                                style: TextStyle(color: p.textMuted, fontSize: 13),
                               ),
                             ),
-                            Expanded(child: Container(height: 1, color: const Color(0xFFE2E8F0))),
+                            Expanded(child: Divider(color: p.divider)),
                           ],
                         ),
                         const SizedBox(height: 22),
 
-                        // Tombol 'Lanjut dengan Google'
                         InkWell(
-                          onTap: () {
-                            Navigator.pushReplacementNamed(context, '/pairing');
-                          },
+                          onTap: () => Navigator.pushReplacementNamed(context, '/pairing'),
                           borderRadius: BorderRadius.circular(12),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -303,10 +219,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               children: [
                                 const _GoogleLogo(size: 20),
                                 const SizedBox(width: 10),
-                                const Text(
+                                Text(
                                   'Lanjut dengan Google',
                                   style: TextStyle(
-                                    color: Color(0xFF0F172A),
+                                    color: p.textPrimary,
                                     fontSize: 14.5,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -317,30 +233,24 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 20),
 
-                        // Belum punya akun? Daftar
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Text(
+                            Text(
                               'Belum punya akun? ',
-                              style: TextStyle(
-                                color: Color(0xFF64748B),
-                                fontSize: 13,
-                              ),
+                              style: TextStyle(color: p.textSecondary, fontSize: 13),
                             ),
                             GestureDetector(
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Halaman pendaftaran akun Klimo Wearth.'),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
-                              },
-                              child: const Text(
+                              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Halaman pendaftaran akun Klimo Wearth.'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              ),
+                              child: Text(
                                 'Daftar',
                                 style: TextStyle(
-                                  color: Color(0xFF00A86B),
+                                  color: p.primary,
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -359,69 +269,75 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+
+  Widget _field(
+    AppPalette p, {
+    required TextEditingController controller,
+    required String hint,
+    bool obscure = false,
+    TextInputType? keyboardType,
+    Widget? suffix,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: p.bg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: p.cardBorder, width: 1.2),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscure,
+        keyboardType: keyboardType,
+        cursorColor: p.primary,
+        style: TextStyle(
+          color: p.textPrimary,
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: p.textMuted, fontSize: 15),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          suffixIcon: suffix,
+        ),
+      ),
+    );
+  }
 }
 
-/// Widget Logo Resmi Google (4 Warna: Biru, Merah, Kuning, Hijau)
 class _GoogleLogo extends StatelessWidget {
-  final double size;
   const _GoogleLogo({this.size = 20});
+
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size(size, size),
-      painter: _GoogleLogoPainter(),
-    );
+    return CustomPaint(size: Size(size, size), painter: _GoogleLogoPainter());
   }
 }
 
 class _GoogleLogoPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final double w = size.width;
-    final double h = size.height;
-    final center = Offset(w / 2, h / 2);
-    final radius = w / 2;
-    final strokeWidth = w * 0.22;
+    final w = size.width;
+    final center = Offset(w / 2, size.height / 2);
+    final stroke = w * 0.22;
+    final rect = Rect.fromCircle(center: center, radius: w / 2 - stroke / 2);
 
-    final blue = Paint()
-      ..color = const Color(0xFF4285F4)
+    Paint arc(Color c) => Paint()
+      ..color = c
       ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
+      ..strokeWidth = stroke;
 
-    final red = Paint()
-      ..color = const Color(0xFFEA4335)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
+    canvas.drawArc(rect, -math.pi * 0.75, math.pi * 0.55, false, arc(const Color(0xFFEA4335)));
+    canvas.drawArc(rect, -math.pi * 1.3, math.pi * 0.55, false, arc(const Color(0xFFFBBC05)));
+    canvas.drawArc(rect, math.pi * 0.25, math.pi * 0.55, false, arc(const Color(0xFF34A853)));
+    canvas.drawArc(rect, -math.pi * 0.2, math.pi * 0.45, false, arc(const Color(0xFF4285F4)));
 
-    final yellow = Paint()
-      ..color = const Color(0xFFFBBC05)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-
-    final green = Paint()
-      ..color = const Color(0xFF34A853)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-
-    final rect = Rect.fromCircle(center: center, radius: radius - strokeWidth / 2);
-
-    // Busur Merah (Atas)
-    canvas.drawArc(rect, -3.14159 * 0.75, 3.14159 * 0.55, false, red);
-    // Busur Kuning (Kiri)
-    canvas.drawArc(rect, -3.14159 * 1.3, 3.14159 * 0.55, false, yellow);
-    // Busur Hijau (Bawah)
-    canvas.drawArc(rect, 3.14159 * 0.25, 3.14159 * 0.55, false, green);
-    // Busur Biru (Kanan)
-    canvas.drawArc(rect, -3.14159 * 0.2, 3.14159 * 0.45, false, blue);
-
-    // Garis horizontal biru ke tengah
-    final barPaint = Paint()
-      ..color = const Color(0xFF4285F4)
-      ..style = PaintingStyle.fill;
     canvas.drawRect(
-      Rect.fromLTWH(center.dx - strokeWidth * 0.2, center.dy - strokeWidth / 2, radius * 0.9, strokeWidth),
-      barPaint,
+      Rect.fromLTWH(center.dx - stroke * 0.2, center.dy - stroke / 2, w / 2 * 0.9, stroke),
+      Paint()..color = const Color(0xFF4285F4),
     );
   }
 
