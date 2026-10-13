@@ -147,7 +147,7 @@ class SyncManager {
       final saved = prefs.getString('custom_base_url');
       if (saved != null && saved.isNotEmpty) return saved;
     } catch (_) {}
-    return 'http://127.0.0.1:8000/api';
+    return 'https://api-klimo.tama-labs.my.id/api';
   }
 
   Future<String?> _getToken() async {

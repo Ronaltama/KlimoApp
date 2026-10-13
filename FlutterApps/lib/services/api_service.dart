@@ -8,9 +8,8 @@ class ApiService {
   static String? _customBaseUrl;
 
   /// Mengambil base URL secara cerdas:
-  /// - Jika di Android Emulator: http://10.0.2.2:8000/api
-  /// - Jika di Linux/Desktop/Web: http://127.0.0.1:8000/api atau http://127.0.0.1:8001/api
-  /// - Atau custom IP yang tersimpan di SharedPreferences (misal IP LAN WiFi)
+  /// - Default production Cloudflare: https://api-klimo.tama-labs.my.id/api
+  /// - Atau custom IP yang tersimpan di SharedPreferences (misal IP LAN WiFi / localhost)
   static Future<String> getBaseUrl() async {
     if (_customBaseUrl != null && _customBaseUrl!.isNotEmpty) {
       return _customBaseUrl!;
@@ -25,28 +24,29 @@ class ApiService {
       }
     } catch (_) {}
 
-    final host = (!kIsWeb && Platform.isAndroid) ? '10.0.2.2' : '127.0.0.1';
+    // Default utama mengarah ke production backend Cloudflare Tunnel
+    const cloudUrl = 'https://api-klimo.tama-labs.my.id/api';
 
-    // Coba port 8000 terlebih dahulu
+    // Fallback cek lokal jika offline/dev
+    final host = (!kIsWeb && Platform.isAndroid) ? '10.0.2.2' : '127.0.0.1';
     final defaultUrl = 'http://$host:8000/api';
+
     try {
-      final res = await http.get(Uri.parse('$defaultUrl/telemetry/latest')).timeout(const Duration(milliseconds: 500));
+      final res = await http.get(Uri.parse('$cloudUrl/telemetry/latest')).timeout(const Duration(milliseconds: 1500));
       if (res.statusCode == 200) {
+        return cloudUrl;
+      }
+    } catch (_) {}
+
+    // Coba port 8000 lokal
+    try {
+      final resLocal = await http.get(Uri.parse('$defaultUrl/telemetry/latest')).timeout(const Duration(milliseconds: 500));
+      if (resLocal.statusCode == 200) {
         return defaultUrl;
       }
     } catch (_) {}
 
-    // Jika port 8000 bentrok dengan aplikasi lain atau offline, coba port 8001
-    final altUrl = 'http://$host:8001/api';
-    try {
-      final resAlt = await http.get(Uri.parse('$altUrl/telemetry/latest')).timeout(const Duration(milliseconds: 500));
-      if (resAlt.statusCode == 200) {
-        _customBaseUrl = altUrl;
-        return altUrl;
-      }
-    } catch (_) {}
-
-    return defaultUrl;
+    return cloudUrl;
   }
 
   /// Mengubah base URL (misal diarahkan ke IP LAN seperti http://192.168.2.19:8000/api)
