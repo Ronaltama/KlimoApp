@@ -6,6 +6,7 @@ import 'uv_detail_screen.dart';
 import '../services/local_data_service.dart';
 import '../services/ble_simulator_service.dart';
 import '../services/sync_manager.dart';
+import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +17,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   TelemetryRecord? _telemetryRecord;
+  String _userName = 'Budi';
   Timer? _uiRefreshTimer;
   Timer? _countdownTicker;
   StreamSubscription<TelemetryRecord>? _bleSubscription;
@@ -46,11 +48,38 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _refreshData() async {
+    await _sync.syncNow();
+    final cached = await LocalDataService.getLatest();
+    if (cached != null && mounted) {
+      setState(() => _telemetryRecord = cached);
+    } else {
+      final cloudLatest = await ApiService.getLatestTelemetry();
+      if (cloudLatest != null && mounted) {
+        setState(() => _telemetryRecord = TelemetryRecord.fromMap(cloudLatest));
+      }
+    }
+  }
+
   Future<void> _initOfflineFirst() async {
+    // 0. Ambil nama profil pengguna jika tersedia
+    ApiService.getProfile().then((p) {
+      if (p != null && p['name'] != null && mounted) {
+        setState(() => _userName = p['name'].toString());
+      }
+    });
+
     // 1. Tampilkan data lokal yang sudah ada (langsung dari SQLite HP)
     final cached = await LocalDataService.getLatest();
     if (cached != null && mounted) {
       setState(() => _telemetryRecord = cached);
+    } else {
+      // Jika SQLite lokal kosong, coba tarik telemetri terkini langsung dari Backend
+      ApiService.getLatestTelemetry().then((cloudLatest) {
+        if (cloudLatest != null && mounted && _telemetryRecord == null) {
+          setState(() => _telemetryRecord = TelemetryRecord.fromMap(cloudLatest));
+        }
+      });
     }
 
     // 2. Subscribe ke stream BLE simulator untuk update realtime
@@ -331,12 +360,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(context, isDark),
+        child: RefreshIndicator(
+          onRefresh: _refreshData,
+          color: AppTheme.primary,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(context, isDark),
               const SizedBox(height: 12),
               _buildConnectionBanner(isDark),
               const SizedBox(height: 12),
@@ -364,8 +397,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   /// Banner status koneksi BLE + Cloud Sync
   Widget _buildConnectionBanner(bool isDark) {
@@ -438,12 +472,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     letterSpacing: 0.5,
                   ),
                 ),
-                Text(
-                  'Budi',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _userName,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : AppTheme.textDark,
+                    ),
                   ),
                 ),
               ],

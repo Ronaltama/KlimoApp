@@ -143,3 +143,99 @@ class AppTheme {
     );
   }
 }
+
+/// Warna yang otomatis mengikuti brightness tema (Light / Dark mode).
+class AppPalette {
+  final Color bg;
+  final Color card;
+  final Color cardBorder;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textMuted;
+  final Color divider;
+  final Color primary;
+  final Color danger;
+  final Color orange;
+
+  const AppPalette({
+    required this.bg,
+    required this.card,
+    required this.cardBorder,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textMuted,
+    required this.divider,
+    required this.primary,
+    required this.danger,
+    required this.orange,
+  });
+
+  static const dark = AppPalette(
+    bg: AppTheme.darkBackground,
+    card: AppTheme.darkCard,
+    cardBorder: AppTheme.darkCardBorder,
+    textPrimary: Colors.white,
+    textSecondary: AppTheme.darkTextSecondary,
+    textMuted: Color(0xFF64748B),
+    divider: AppTheme.darkCardBorder,
+    primary: AppTheme.primary,
+    danger: AppTheme.error,
+    orange: Color(0xFFF59E0B),
+  );
+
+  static const light = AppPalette(
+    bg: AppTheme.background,
+    card: Colors.white,
+    cardBorder: AppTheme.greyLight,
+    textPrimary: AppTheme.textDark,
+    textSecondary: AppTheme.textLight,
+    textMuted: Color(0xFF9CA3AF),
+    divider: AppTheme.greyLight,
+    primary: AppTheme.primary,
+    danger: AppTheme.error,
+    orange: Color(0xFFEA580C),
+  );
+
+  static AppPalette of(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark ? dark : light;
+  }
+}
+
+/// Kartu dasar seragam: putih + bayangan lembut di mode terang, border tipis di mode gelap.
+class AppCard extends StatelessWidget {
+  const AppCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+  });
+
+  final Widget child;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: p.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: isDark ? p.cardBorder : Colors.transparent),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+      ),
+      child: child,
+    );
+  }
+}
+

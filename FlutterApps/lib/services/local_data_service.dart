@@ -55,7 +55,7 @@ class TelemetryRecord {
       voc: (map['voc'] as num?)?.toInt() ?? 0,
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
-      timestamp: DateTime.tryParse(map['timestamp'] as String? ?? '') ?? DateTime.now(),
+      timestamp: DateTime.tryParse(map['timestamp'] as String? ?? map['created_at'] as String? ?? '') ?? DateTime.now(),
       synced: (map['synced'] as int? ?? 0) == 1,
     );
   }

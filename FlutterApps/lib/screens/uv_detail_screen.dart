@@ -140,7 +140,7 @@ class UVDetailScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'VEML6075',
+                  'Sensor UV',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,

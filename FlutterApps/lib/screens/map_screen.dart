@@ -220,51 +220,63 @@ class _MapScreenState extends State<MapScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF132D27) : const Color(0xFFD1FAE5),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.map, color: AppTheme.primary, size: 24),
-            ),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Peta Lingkungan',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppTheme.textDark,
-                  ),
+        Expanded(
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF132D27) : const Color(0xFFD1FAE5),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 2),
-                Row(
+                child: const Icon(Icons.map, color: AppTheme.primary, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      _isFromApi ? Icons.cloud_done_outlined : Icons.storage_outlined,
-                      size: 13,
-                      color: _isFromApi ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _isFromApi ? 'Data Komunitas Cloud' : 'Data Lokal HP',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Peta Lingkungan',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : AppTheme.textDark,
+                        ),
                       ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          _isFromApi ? Icons.cloud_done_outlined : Icons.storage_outlined,
+                          size: 13,
+                          color: _isFromApi ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : AppTheme.textLight),
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            _isFromApi ? 'Data Komunitas Cloud' : 'Data Lokal HP',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
-        // Tombol Refresh / Sinkronisasi Cepat
+        const SizedBox(width: 8),
+        // Tombol Refresh / Perbarui Cepat
         InkWell(
           onTap: _isLoading ? null : _fetchMapData,
           borderRadius: BorderRadius.circular(20),
@@ -289,7 +301,7 @@ class _MapScreenState extends State<MapScreen> {
                     : const Icon(Icons.refresh, size: 16, color: AppTheme.primary),
                 const SizedBox(width: 6),
                 Text(
-                  'Sinkron',
+                  'Perbarui',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -582,13 +594,16 @@ class _MapScreenState extends State<MapScreen> {
       ),
     );
 
-    final mapHeight = _isMapExpanded ? 520.0 : 290.0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final mapHeight = _isMapExpanded ? 520.0 : (w * 0.72).clamp(240.0, 320.0);
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      height: mapHeight,
-      width: double.infinity,
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          height: mapHeight,
+          width: double.infinity,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF131D2D) : const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(24),
@@ -764,6 +779,8 @@ class _MapScreenState extends State<MapScreen> {
           ],
         ),
       ),
+    );
+      },
     );
   }
 

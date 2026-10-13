@@ -247,7 +247,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     : const Icon(Icons.refresh, size: 16, color: AppTheme.primary),
                 const SizedBox(width: 6),
                 Text(
-                  'Sinkron',
+                  'Perbarui',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -535,10 +535,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     const Icon(Icons.tune, color: AppTheme.primary, size: 18),
                     const SizedBox(width: 8),
                     Text(
-                      'Informasi Teknis Perangkat (Lanjutan)',
+                      'Info Perangkat',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                        fontSize: 14,
                         color: isDark ? Colors.white : AppTheme.textDark,
                       ),
                     ),
@@ -556,10 +556,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
             const SizedBox(height: 14),
             Divider(height: 1, color: isDark ? AppTheme.darkCardBorder : AppTheme.greyLight),
             const SizedBox(height: 10),
-            _buildSpecRow('MAC Address', macAddress, isDark),
+            _buildSpecRow('ID Perangkat', macAddress, isDark),
             _buildSpecRow('Versi Firmware', 'v1.2.0 (PlatformIO / ESP-IDF)', isDark),
-            _buildSpecRow('Protokol Transmisi', 'BLE 5.0 GATT & WiFi 2.4GHz', isDark),
-            _buildSpecRow('Mikrokontroler', 'Espressif ESP32-C3 RISC-V 160MHz', isDark),
+            _buildSpecRow('Koneksi', 'BLE 5.0 GATT & WiFi 2.4GHz', isDark),
+            _buildSpecRow('Chip', 'Espressif ESP32-C3 RISC-V 160MHz', isDark),
           ],
         ],
       ),
@@ -622,7 +622,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                   const Icon(Icons.sensors, color: AppTheme.primary, size: 20),
                   const SizedBox(width: 8),
                   Text(
-                    'Status Sensor Fisik',
+                    'Status Sensor',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -653,7 +653,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
           const SizedBox(height: 16),
           _buildSensorRow(
             icon: Icons.wb_sunny_outlined,
-            name: 'Sensor Radiasi UV (Matahari)',
+            name: 'Sinar UV',
             desc: 'Mengukur sengatan sinar matahari langsung',
             statusText: uvStatus,
             isOnline: isOnline,
@@ -661,7 +661,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
           ),
           _buildSensorRow(
             icon: Icons.thermostat_outlined,
-            name: 'Sensor Suhu & Kelembapan',
+            name: 'Suhu & Kelembapan',
             desc: 'Mengukur panas sekitar & kelembapan udara',
             statusText: tempStatus,
             isOnline: isOnline,
@@ -669,7 +669,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
           ),
           _buildSensorRow(
             icon: Icons.air,
-            name: 'Sensor Kualitas Udara (Gas)',
+            name: 'Kualitas Udara',
             desc: 'Mendeteksi polusi & senyawa gas berbahaya',
             statusText: vocStatus,
             isOnline: isOnline,
@@ -677,7 +677,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
           ),
           _buildSensorRow(
             icon: Icons.vibration,
-            name: 'Alarm Getar Gelang (Haptic)',
+            name: 'Alarm Getar',
             desc: 'Alarm fisik saat bahaya cuaca terdeteksi',
             statusText: isOnline ? 'Siaga Bergetar' : 'Offline',
             isOnline: isOnline,
@@ -935,7 +935,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
               const Icon(Icons.vibration, color: AppTheme.primary, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Arti Pola Getaran Gelang',
+                'Arti Pola Getar',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
@@ -946,7 +946,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Gelang akan bergetar otomatis untuk memberi tahu kondisi bahaya:',
+            'Alat akan bergetar sesuai jenis peringatan:',
             style: TextStyle(
               fontSize: 12,
               color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,

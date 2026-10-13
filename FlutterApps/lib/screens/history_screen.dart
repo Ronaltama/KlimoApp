@@ -251,6 +251,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     color: isDark ? Colors.white : AppTheme.textDark,
                   ),
                 ),
+                Text(
+                  'Rekaman cuaca & paparan kamu',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                  ),
+                ),
+                const SizedBox(height: 2),
                 Row(
                   children: [
                     Container(
@@ -265,7 +273,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     Text(
                       _isFromLocal ? 'SQLite Lokal HP (Offline)' : 'Database API Server',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: _isFromLocal ? const Color(0xFF10B981) : const Color(0xFF3B82F6),
                       ),
@@ -305,7 +313,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     : const Icon(Icons.refresh, size: 16, color: AppTheme.primary),
                 const SizedBox(width: 6),
                 Text(
-                  'Sinkron',
+                  'Perbarui',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -480,10 +488,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildChartCard(bool isDark) {
-    String chartTitle = _isWeekly ? 'Paparan Sinar UV Mingguan' : 'Paparan Sinar UV Harian';
+    String chartTitle = _isWeekly ? 'Sinar UV Minggu Ini' : 'Sinar UV Hari Ini';
     String subtitle = _isWeekly
-        ? 'Puncak intensitas radiasi UV dalam 7 hari terakhir'
-        : 'Fluktuasi intensitas sinar UV pada jam-jam aktif';
+        ? 'Nilai tertinggi tiap hari (7 hari terakhir)'
+        : 'Seberapa kuat matahari tiap jam';
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -500,33 +508,38 @@ class _HistoryScreenState extends State<HistoryScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.wb_sunny_outlined, size: 16, color: AppTheme.primary),
-                      const SizedBox(width: 6),
-                      Text(
-                        chartTitle,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : AppTheme.textDark,
-                          fontSize: 15,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.wb_sunny_outlined, size: 16, color: AppTheme.primary),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            chartTitle,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : AppTheme.textDark,
+                              fontSize: 15,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textLight,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
@@ -534,7 +547,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'Puncak: ${_historyData.isEmpty ? "-" : _peakUv.toStringAsFixed(1)}',
+                  'Tertinggi: ${_historyData.isEmpty ? "-" : _peakUv.toStringAsFixed(1)}',
                   style: const TextStyle(
                     color: Color(0xFFF59E0B),
                     fontSize: 11,
@@ -544,30 +557,36 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 28),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: _isWeekly
-                ? Row(
-                    key: const ValueKey('weekly_chart'),
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: _weeklyBars.map((bar) {
-                      final heightFactor = bar.$2 > 0 ? (bar.$2 / 12.0).clamp(0.12, 1.0) : 0.08;
-                      final valText = bar.$2 > 0 ? bar.$2.toStringAsFixed(1) : '-';
-                      return _buildBar(bar.$1, heightFactor, bar.$3, isDark, valText);
-                    }).toList(),
-                  )
-                : Row(
-                    key: const ValueKey('daily_chart'),
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: _dailyBars.map((bar) {
-                      final heightFactor = bar.$2 > 0 ? (bar.$2 / 12.0).clamp(0.12, 1.0) : 0.08;
-                      final valText = bar.$2 > 0 ? bar.$2.toStringAsFixed(1) : '-';
-                      return _buildBar(bar.$1, heightFactor, bar.$3, isDark, valText);
-                    }).toList(),
-                  ),
+          const SizedBox(height: 24),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final chartWidth = constraints.maxWidth;
+              final barMaxHeight = (chartWidth * 0.38).clamp(90.0, 150.0);
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: _isWeekly
+                    ? Row(
+                        key: const ValueKey('weekly_chart'),
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: _weeklyBars.map((bar) {
+                          final heightFactor = bar.$2 > 0 ? (bar.$2 / 12.0).clamp(0.12, 1.0) : 0.08;
+                          final valText = bar.$2 > 0 ? bar.$2.toStringAsFixed(1) : '-';
+                          return _buildBar(bar.$1, heightFactor, bar.$3, isDark, valText, barMaxHeight);
+                        }).toList(),
+                      )
+                    : Row(
+                        key: const ValueKey('daily_chart'),
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: _dailyBars.map((bar) {
+                          final heightFactor = bar.$2 > 0 ? (bar.$2 / 12.0).clamp(0.12, 1.0) : 0.08;
+                          final valText = bar.$2 > 0 ? bar.$2.toStringAsFixed(1) : '-';
+                          return _buildBar(bar.$1, heightFactor, bar.$3, isDark, valText, barMaxHeight);
+                        }).toList(),
+                      ),
+              );
+            },
           ),
           const SizedBox(height: 16),
           Container(
@@ -597,7 +616,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildBar(String label, double heightFactor, bool isActive, bool isDark, String valueLabel) {
+  Widget _buildBar(String label, double heightFactor, bool isActive, bool isDark, String valueLabel, [double barMaxHeight = 120.0]) {
     return Column(
       children: [
         Text(
@@ -611,7 +630,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         const SizedBox(height: 6),
         Container(
           width: 24,
-          height: 120 * heightFactor,
+          height: barMaxHeight * heightFactor,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
