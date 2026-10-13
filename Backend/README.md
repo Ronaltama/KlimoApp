@@ -1,58 +1,128 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# ☁️ Klimo Wearth - Backend REST API (Laravel 13)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Layanan Cloud Backend resmi untuk proyek **Klimo Wearth** (*Personal Weather & Wearable Microclimate Monitoring*), dibangun menggunakan **Laravel 13** dan **Laravel Sanctum**.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 🏛️ Arsitektur & Logika Cerdas Backend
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Layanan backend bertindak sebagai penyimpan data cloud, otentikasi pengguna, serta pemroses telemetri lingkungan dengan efisiensi tinggi:
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### 1. Mesin Penyaringan Cerdas: Delta Threshold & Heartbeat
+Untuk mencegah database MySQL penuh berlebihan (*bloating*) ketika ratusan perangkat IoT mengirimkan data setiap beberapa detik, backend mengimplementasikan **Delta Threshold Filtering**:
 
-## Learning Laravel
+* **Kriteria Simpan Baris Baru**:
+  * Indeks UV berubah $\ge 0.2$
+  * Suhu berubah $\ge 0.3^\circ\text{C}$
+  * Kelembaban berubah $\ge 1.0\%$
+  * Konsentrasi Gas VOC berubah $\ge 10$
+  * Pergeseran koordinat GPS $\ge 0.0001^\circ$ (~11 meter)
+* **Checkpoint Heartbeat**:
+  * Jika nilai sensor stabil dan tidak berubah signifikan, data dilewati (*skip*). Namun, jika sudah mencapai **5 menit (300 detik)** tanpa pencatatan, sistem otomatis menyimpan 1 baris sebagai checkpoint status alat.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### 2. Batch Sync Telemetri Offline
+Mendukung sinkronisasi massal dari aplikasi mobile (*Offline-First*) melalui endpoint `POST /api/telemetry/batch`, memungkinkan HP mengunggah puluhan log pencatatan sekaligus dalam satu transaksi HTTP.
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+---
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## 🗄️ Skema Basis Data (Database Schema)
 
-## Agentic Development
+```text
+users
+├── id (BIGINT, PK)
+├── name (VARCHAR)
+├── email (VARCHAR, UNIQUE)
+├── password (VARCHAR, HASHED)
+├── skin_type (VARCHAR, DEFAULT 'Tipe IV')   # Personalisasi Fitzpatrick Scale
+└── timestamps
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+devices
+├── id (BIGINT, PK)
+├── user_id (BIGINT, FK -> users.id)
+├── mac_address (VARCHAR, UNIQUE)            # MAC Address Hardware ESP32
+├── name (VARCHAR)                           # Nama perangkat (misal Klimo-A3F2)
+└── timestamps
 
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+telemetries
+├── id (BIGINT, PK)
+├── device_id (BIGINT, FK -> devices.id)
+├── user_id (BIGINT, FK -> users.id)
+├── uv_index (FLOAT)                         # Indeks radiasi UV
+├── temperature (FLOAT)                      # Suhu lingkungan (°C)
+├── humidity (FLOAT)                         # Kelembaban udara (%)
+├── voc (INT)                                # Indeks gas organik volatil
+├── latitude (DECIMAL 10,8)                  # Koordinat Lintang
+├── longitude (DECIMAL 11,8)                 # Koordinat Bujur
+└── timestamps (created_at = recorded_at)
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+---
 
-## Contributing
+## 🔑 Dokumentasi REST API
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+| Method | Endpoint | Fungsi | Payload / Parameter | Auth |
+| :--- | :--- | :--- | :--- | :---: |
+| `POST` | `/api/register` | Mendaftarkan akun baru | `name`, `email`, `password`, `skin_type` | Publik |
+| `POST` | `/api/login` | Masuk ke akun | `email`, `password` | Publik |
+| `POST` | `/api/login/google` | Autentikasi akun Google | `email`, `name` | Publik |
+| `POST` | `/api/logout` | Revoke token aktif | - | Bearer Token |
+| `GET`  | `/api/profile` | Ambil profil pengguna | - | Bearer Token |
+| `PUT`  | `/api/profile` | Update nama / tipe kulit | `name` (opsional), `skin_type` (opsional) | Bearer Token |
+| `GET`  | `/api/devices` | Daftar perangkat terhubung | - | Publik / Token |
+| `POST` | `/api/devices` | Daftarkan perangkat baru | `mac_address`, `name` | Publik / Token |
+| `POST` | `/api/telemetry` | Kirim telemetri (Delta filter)| `mac_address`, `uv_index`, `temperature`, dsb. | Publik / Token |
+| `POST` | `/api/telemetry/batch` | Sinkronisasi batch offline | `readings`: `[ { mac_address, uv_index, ... } ]` | Publik / Token |
+| `GET`  | `/api/telemetry/latest`| Ambil data sensor terkini | - | Publik / Token |
+| `GET`  | `/api/telemetry/history`| Ambil 50 data riwayat | - | Publik / Token |
+| `GET`  | `/api/map/heatmap` | Ambil 100 data spasial peta | - | Publik / Token |
 
-## Code of Conduct
+---
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## 🚀 Panduan Menjalankan Backend
 
-## Security Vulnerabilities
+### 1. Instalasi Dependensi
+```bash
+cd Backend
+composer install
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### 2. Konfigurasi Environment (`.env`)
+```bash
+cp .env.example .env
+php artisan key:generate
+```
+Pastikan pengaturan basis data mengarah ke MySQL Anda:
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=klimo_db
+DB_USERNAME=root
+DB_PASSWORD=
+```
 
-## License
+### 3. Migrasi Database
+```bash
+php artisan migrate
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+### 4. Jalankan Server Pengembangan
+```bash
+php artisan serve --host=0.0.0.0 --port=8000
+```
+> Server akan aktif dan dapat diakses dari localhost maupun perangkat HP dalam jaringan WiFi yang sama di `http://<IP_KOMPUTER>:8000`.
+
+---
+
+## 🧪 Pengujian Unit & Fitur (Testing)
+
+Proyek ini telah dilengkapi dengan suite pengujian otomatis fitur autentikasi, penyaringan telemetri, dan sinkronisasi batch:
+
+```bash
+php artisan test
+```
+
+**Hasil Pengujian Saat Ini**:
+* **18 Tests Passed** (100% Lulus)
+* **571 Assertions Validated**
+* **0 Failures / 0 Errors**

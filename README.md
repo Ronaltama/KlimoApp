@@ -20,6 +20,19 @@ Untuk mencoba aplikasi secara langsung di smartphone Android tanpa perlu melakuk
 
 ---
 
+## 📚 Dokumentasi Khusus per Modul
+
+Repositori ini tersusun secara modular. Untuk mempelajari detail arsitektur, kode, dan panduan teknis masing-masing komponen, silakan pilih dokumentasi di bawah ini:
+
+| Modul | Dokumentasi Teknis | Deskripsi Singkat |
+| :--- | :--- | :--- |
+| 📱 **Mobile App** | [**`FlutterApps/README.md`**](FlutterApps/README.md) | Arsitektur Offline-First, SQLite Lokal, Screen UI, & Panduan Flutter |
+| ☁️ **Backend API** | [**`Backend/README.md`**](Backend/README.md) | REST API Laravel 13, Sanctum Auth, Skema DB, & Delta Threshold Engine |
+| 🛰️ **IoT & Hardware** | [**`IoT_Simulator/README.md`**](IoT_Simulator/README.md) | Firmware ESP32-C3, Wiring I2C Bus, Wokwi Circuit, & PlatformIO CLI |
+| 📦 **Paket Rilis** | [**`release/README.md`**](release/README.md) | Paket APK Android Production Siap Pakai & Panduan Instalasi HP |
+
+---
+
 ## 💡 Tentang Solusi: Klimo Wearth
 
 Pekerja lapangan, kurir, atlet, dan masyarakat urban sering kali terpapar bahaya radiasi sinar UV ekstrem, suhu panas menyengat (*heat exhaustion*), serta akumulasi polusi gas beracun tanpa alat ukur objektif di tubuh mereka. 
