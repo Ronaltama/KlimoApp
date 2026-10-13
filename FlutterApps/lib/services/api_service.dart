@@ -9,7 +9,7 @@ class ApiService {
 
   /// Mengambil base URL secara cerdas:
   /// - Jika di Android Emulator: http://10.0.2.2:8000/api
-  /// - Jika di Linux/Desktop/Web: http://127.0.0.1:8000/api
+  /// - Jika di Linux/Desktop/Web: http://127.0.0.1:8000/api atau http://127.0.0.1:8001/api
   /// - Atau custom IP yang tersimpan di SharedPreferences (misal IP LAN WiFi)
   static Future<String> getBaseUrl() async {
     if (_customBaseUrl != null && _customBaseUrl!.isNotEmpty) {
@@ -25,10 +25,28 @@ class ApiService {
       }
     } catch (_) {}
 
-    if (!kIsWeb && Platform.isAndroid) {
-      return 'http://10.0.2.2:8000/api';
-    }
-    return 'http://127.0.0.1:8000/api';
+    final host = (!kIsWeb && Platform.isAndroid) ? '10.0.2.2' : '127.0.0.1';
+
+    // Coba port 8000 terlebih dahulu
+    final defaultUrl = 'http://$host:8000/api';
+    try {
+      final res = await http.get(Uri.parse('$defaultUrl/telemetry/latest')).timeout(const Duration(milliseconds: 500));
+      if (res.statusCode == 200) {
+        return defaultUrl;
+      }
+    } catch (_) {}
+
+    // Jika port 8000 bentrok dengan aplikasi lain atau offline, coba port 8001
+    final altUrl = 'http://$host:8001/api';
+    try {
+      final resAlt = await http.get(Uri.parse('$altUrl/telemetry/latest')).timeout(const Duration(milliseconds: 500));
+      if (resAlt.statusCode == 200) {
+        _customBaseUrl = altUrl;
+        return altUrl;
+      }
+    } catch (_) {}
+
+    return defaultUrl;
   }
 
   /// Mengubah base URL (misal diarahkan ke IP LAN seperti http://192.168.2.19:8000/api)
@@ -124,6 +142,46 @@ class ApiService {
         return {'success': true, 'data': data};
       } else {
         return {'success': false, 'message': 'Email atau password salah'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Gagal konek ke Backend ($e)'};
+    }
+  }
+
+  // Fungsi Registrasi Akun Baru
+  static Future<Map<String, dynamic>> register(String name, String email, String password) async {
+    try {
+      final baseUrl = await getBaseUrl();
+      final response = await http.post(
+        Uri.parse('$baseUrl/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'name': name,
+          'email': email,
+          'password': password,
+        }),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        final token = data['token'] ?? data['data']?['token'] ?? '';
+        if (token.isNotEmpty) {
+          await saveToken(token);
+        }
+        if (data['data']?['user']?['id'] != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt('user_id', data['data']['user']['id'] as int);
+        }
+        return {'success': true, 'data': data};
+      } else {
+        final data = jsonDecode(response.body);
+        String msg = 'Pendaftaran gagal';
+        if (data['message'] != null) {
+          msg = data['message'];
+        } else if (data['errors'] != null) {
+          msg = data['errors'].values.first[0];
+        }
+        return {'success': false, 'message': msg};
       }
     } catch (e) {
       return {'success': false, 'message': 'Gagal konek ke Backend ($e)'};
