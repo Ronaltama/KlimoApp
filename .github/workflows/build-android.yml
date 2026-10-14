@@ -1,6 +1,10 @@
 name: Build Android Release (CI/CD)
 
 on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       commit_to_repo:
@@ -8,9 +12,6 @@ on:
         required: true
         type: boolean
         default: true
-  push:
-    tags:
-      - 'v*'
 
 permissions:
   contents: write
