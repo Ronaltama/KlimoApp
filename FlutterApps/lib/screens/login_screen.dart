@@ -71,19 +71,6 @@ class _LoginScreenState extends State<LoginScreen> {
           content: Text(result['message'] ?? 'Login gagal. Periksa kembali akun atau backend.'),
           backgroundColor: const Color(0xFFEF4444),
           behavior: SnackBarBehavior.floating,
-          action: SnackBarAction(
-            label: 'Lewati',
-            textColor: Colors.white,
-            onPressed: () async {
-              final isSetupDone = await ApiService.isOnboardingCompleted();
-              if (!mounted) return;
-              if (isSetupDone) {
-                Navigator.pushReplacementNamed(context, '/main');
-              } else {
-                Navigator.pushReplacementNamed(context, '/pairing');
-              }
-            },
-          ),
         ),
       );
     }
