@@ -330,7 +330,7 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
                       : ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                           itemCount: filtered.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 8),
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             return _buildRecordCard(filtered[index], isDark);
                           },

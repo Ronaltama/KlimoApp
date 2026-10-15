@@ -544,23 +544,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _buildTag(
                     Icons.wb_sunny_outlined,
                     'UV ${telemetryData?['uv_index'] ?? '-'}',
                     isDark,
                   ),
-                  const SizedBox(width: 8),
                   _buildTag(
                     Icons.thermostat_outlined,
                     'Suhu ${telemetryData?['temperature'] ?? '-'}°C',
                     isDark,
                   ),
-                  const SizedBox(width: 8),
                   _buildTag(
                     Icons.water_drop_outlined,
-                    'Kelembapan ${telemetryData?['humidity'] ?? '-'}%',
+                    'Lembap ${telemetryData?['humidity'] ?? '-'}%',
                     isDark,
                   ),
                 ],
@@ -574,7 +574,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTag(IconData icon, String label, bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF131D2D) : const Color(0xFFFEF3C7),
         borderRadius: BorderRadius.circular(20),
@@ -585,8 +585,8 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: isDark ? AppTheme.primary : const Color(0xFF92400E)),
-          const SizedBox(width: 6),
+          Icon(icon, size: 14, color: isDark ? AppTheme.primary : const Color(0xFF92400E)),
+          const SizedBox(width: 5),
           Text(
             label,
             style: TextStyle(
@@ -981,7 +981,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               if (subtitle.isNotEmpty && trailingSubtitle != null)
                 const SizedBox(width: 6),
-              ?trailingSubtitle,
+              if (trailingSubtitle != null) trailingSubtitle,
             ],
           ),
           if (progress != null) ...[

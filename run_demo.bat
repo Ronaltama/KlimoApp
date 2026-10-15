@@ -7,6 +7,12 @@ set "BACKEND_DIR=%ROOT_DIR%Backend"
 set "IOT_DIR=%ROOT_DIR%IoT_Simulator"
 set "FLUTTER_DIR=%ROOT_DIR%FlutterApps"
 
+REM Pastikan PHP dan Composer dari Laragon masuk PATH jika belum terdeteksi
+where php >nul 2>nul
+if %errorlevel% neq 0 (
+    set "PATH=C:\laragon\bin\php\php-8.4.23-Win32-vs17-x64;C:\laragon\bin\mysql\mysql-8.0.30-winx64\bin;C:\laragon\bin\composer;%PATH%"
+)
+
 :menu
 cls
 echo =====================================================
